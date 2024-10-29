@@ -29,11 +29,45 @@ import whisper
 OUTPUT_VIDEO_PATH = 'video.mp4'
 OUTPUT_FOLDER = 'scenes'
 OUTPUT_PDF = 'presentation_slides.pdf'
+SSIM_THRESHOLD = 0.65
+FRAME_SKIP = 300
 
-# Scene detection parameters
-SSIM_THRESHOLD = 0.65  # Adjust this value based on your video characteristics
-FRAME_SKIP = 300  # Process every 30th frame
-MIN_SCENE_DURATION = 1  # Minimum time (in seconds) between saved frames
+# System Prompts
+TRANSCRIPT_SYSTEM_PROMPT = """As an instructor, generate a comprehensive summary that captures the key points and insights \
+from the provided material. Focus on explaining concepts clearly and engagingly, ensuring that the content is informative \
+and easy to understand for the intended audience. Highlight important details, examples, and any relevant applications \
+without referring to the source material. Aim for a concise yet thorough overview that could serve as a teaching aid.\
+Use markdown formatting for structure, including headers and numbering points where appropriate."""
+
+IMAGE_SUMMARY_SYSTEM_PROMPT = TRANSCRIPT_SYSTEM_PROMPT  # Using the same prompt for consistency
+
+# User Prompts
+MEANINGFUL_CONTENT_PROMPT = """Definition of Meaningful Content:\
+Meaningful content includes any text, diagrams, charts, images (beyond participant profile pictures), \
+tables, or visual elements that provide valuable information or insights. This content should contribute \
+directly to the understanding or learning points you want to cover in your lecture notes. \
+Examples include slides with data, key points, or visual aids that can be explained further in the notes. \
+What is Not Considered Meaningful Content:\
+Slides that only display people's profile pictures, names, or generic visuals from the meeting \
+(e.g., video feeds or participant screens), as well as blank slides, are classified as No Meaningful Content. \
+These slides do not provide valuable material for lecture notes.\
+Task:\
+Analyze the provided slide and classify it as Contains Meaningful Content if it includes \
+text, diagrams, or other elements that can be elaborated upon in lecture notes. \
+If the slide contains only people's images or does not have useful content, \
+classify it as false otherwise true. You give only TRUE or FALSE(case sensitive). Do not give explanation.\
+"""
+
+DUPLICATE_DETECTION_PROMPT = """Compare these two images and determine if they show the same content or slide. \
+Consider text, diagrams, and visual elements. Respond with only 'TRUE' if they are duplicates or 'FALSE' if they are different. \
+No explanation needed."""
+
+TRANSCRIPT_USER_PROMPT = """Please summarize the following transcript, ensuring that no details are missed. \
+:\n\n{text}"""
+
+IMAGE_SUMMARY_USER_PROMPT = """Based on this transcript summary:\n\n{transcript}\n\n\
+Please provide a brief description of what is shown in the image {image}. \
+Focus on how it relates to the content of the transcript"""
 
 client = OpenAI()
 
@@ -71,7 +105,7 @@ def scene_detection(video_path, output_folder=OUTPUT_FOLDER):
             if last_saved_frame is not None:
                 ssim_score, _ = ssim(last_saved_frame, gray_frame, full=True)
 
-                if ssim_score < SSIM_THRESHOLD and (current_time - last_save_time) >= MIN_SCENE_DURATION:
+                if ssim_score < SSIM_THRESHOLD :
                     scene_number += 1
                     output_filename = f'{output_folder}/scene_{scene_number}.png'
                     cv2.imwrite(output_filename, frame)
@@ -104,21 +138,7 @@ def analyze_image(image_path):
                     "role": "user",
                     "content": [
                         {"type": "text", 
-                         "text": "Definition of Meaningful Content:\
-Meaningful content includes any text, diagrams, charts, images (beyond participant profile pictures), \
-tables, or visual elements that provide valuable information or insights. This content should contribute \
-directly to the understanding or learning points you want to cover in your lecture notes. \
-Examples include slides with data, key points, or visual aids that can be explained further in the notes. \
-What is Not Considered Meaningful Content:\
-Slides that only display people's profile pictures, names, or generic visuals from the meeting \
-(e.g., video feeds or participant screens), as well as blank slides, are classified as No Meaningful Content. \
-These slides do not provide valuable material for lecture notes.\
-Task:\
-Analyze the provided slide and classify it as Contains Meaningful Content if it includes \
-text, diagrams, or other elements that can be elaborated upon in lecture notes. \
-If the slide contains only people's images or does not have useful content, \
-classify it as false otherwise true. You give only TRUE or FALSE(case sensitive). Do not give explanation.\
-"},
+                         "text": MEANINGFUL_CONTENT_PROMPT},
                         {
                             "type": "image_url",
                             "image_url": {
@@ -166,11 +186,8 @@ def summarize_transcript(transcript_path):
         with open(transcript_path, 'r', encoding='utf-8') as file:
             full_text = file.read()
         
-        user_prompt = f"Please summarize the following transcript, ensuring that no details are missed. Use markdown headers, paragraphs, and bullet points for clear structure:\n\n{full_text}"
-        system_prompt = "As an instructor, generate a comprehensive summary that captures the key points and insights from the provided material. \
-            Focus on explaining concepts clearly and engagingly, ensuring that the content is informative and easy to understand for the intended audience. \
-            Highlight important details, examples, and any relevant applications without referring to the source material.\
-            Aim for a concise yet thorough overview that could serve as a teaching aid.Use markdown formatting for structure, including headers and bullet points where appropriate."
+        user_prompt = TRANSCRIPT_USER_PROMPT.format(text=full_text)
+        system_prompt = TRANSCRIPT_SYSTEM_PROMPT
 
         response = client.chat.completions.create(
             model="gpt-4o-mini",
@@ -196,11 +213,8 @@ def get_image_summaries(meaningful_images, transcript_summary):
     for image_file, _ in meaningful_images:
         print(f"Generating summary for image: {image_file}")
         image_path = os.path.join(OUTPUT_FOLDER, image_file)
-        user_prompt = f"Based on this transcript summary:\n\n{transcript_summary}\n\nPlease provide a brief description of what is shown in the image {image_file}. Focus on how it relates to the content of the transcript"
-        system_prompt = "As an instructor, generate a comprehensive summary that captures the key points and insights from the provided material. \
-            Focus on explaining concepts clearly and engagingly, ensuring that the content is informative and easy to understand for the intended audience. \
-            Highlight important details, examples, and any relevant applications without referring to the source material.\
-            Aim for a concise yet thorough overview that could serve as a teaching aid.Use markdown formatting for structure, including headers and bullet points where appropriate."
+        user_prompt = IMAGE_SUMMARY_USER_PROMPT.format(transcript=transcript_summary, image=image_file)
+        system_prompt = IMAGE_SUMMARY_SYSTEM_PROMPT
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
@@ -292,15 +306,87 @@ def transcribe_video(video_path, output_path='transcription.txt'):
     print(f"Transcription completed and saved to: {output_path}")
     return output_path
 
+def remove_duplicate_scenes_gpt(folder_path=OUTPUT_FOLDER):
+    print("Starting remove_duplicate_scenes_gpt function")
+    image_files = [f for f in os.listdir(folder_path) if f.endswith('.png')]
+    if not image_files:
+        print(f"No png files found in {folder_path}")
+        return []
+
+    image_files.sort(key=lambda x: int(x.split('_')[1].split('.')[0]))
+    print(f"Found {len(image_files)} images to process for duplicates using GPT Vision")
+
+    unique_images = []
+    for i, image_file in enumerate(image_files):
+        image_path = os.path.join(folder_path, image_file)
+        
+        is_duplicate = False
+        for j in range(i + 1, len(image_files)):
+            next_image_path = os.path.join(folder_path, image_files[j])
+            
+            # Encode both images
+            with open(image_path, "rb") as img1_file, open(next_image_path, "rb") as img2_file:
+                encoded_img1 = base64.b64encode(img1_file.read()).decode('utf-8')
+                encoded_img2 = base64.b64encode(img2_file.read()).decode('utf-8')
+
+            try:
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", 
+                                 "text": DUPLICATE_DETECTION_PROMPT},
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:image/png;base64,{encoded_img1}"
+                                    }
+                                },
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:image/png;base64,{encoded_img2}"
+                                    }
+                                }
+                            ]
+                        }
+                    ],
+                    max_tokens=10
+                )
+
+                is_same = response.choices[0].message.content.strip() == "TRUE"
+                print(f"Comparing {image_file} and {image_files[j]}: {'Same' if is_same else 'Different'}")
+                
+                if is_same:
+                    print(f"Duplicate scene detected: {image_file} and {image_files[j]}")
+                    is_duplicate = True
+                    break
+
+            except Exception as e:
+                print(f"Error comparing images {image_file} and {image_files[j]}: {str(e)}")
+                continue
+
+        if not is_duplicate:
+            unique_images.append(image_file)
+
+    # Remove duplicate images
+    for image_file in image_files:
+        if image_file not in unique_images:
+            os.remove(os.path.join(folder_path, image_file))
+            print(f"Removed duplicate scene: {image_file}")
+
+    print(f"Finished remove_duplicate_scenes_gpt function, {len(unique_images)} unique images remain")
+    return unique_images
+
 # Main execution
 if __name__ == "__main__":
-    print("Starting main execution")
-
+    print("Starting main execution")    
+    
     # Transcribe video
-    print("Starting vedio transcription")
-    video_path = OUTPUT_VIDEO_PATH  # Adjust this to your video file path
+    video_path = 'video.mp4'  # Adjust this to your video file path
     transcript_path = transcribe_video(video_path)
-    print("Vedio transcription completed")
 
     # Perform scene detection
     print("Starting scene detection")
@@ -312,6 +398,10 @@ if __name__ == "__main__":
     if not meaningful_images:
         print("No meaningful images found", file=sys.stderr)
         sys.exit(1)
+
+    # Remove duplicate scenes using GPT Vision
+    unique_scenes_gpt = remove_duplicate_scenes_gpt()
+    print(f"Unique scenes after removing duplicates with GPT Vision: {len(unique_scenes_gpt)}")
 
     # Summarize transcript
     transcript_summary = summarize_transcript(transcript_path)
@@ -326,3 +416,4 @@ if __name__ == "__main__":
     create_pdf_report(image_summaries, transcript_summary)
 
     print("Main execution completed successfully")
+    
