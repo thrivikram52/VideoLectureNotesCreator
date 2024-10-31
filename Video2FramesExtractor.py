@@ -56,7 +56,6 @@ def clean_output_folder(folder_path):
         os.makedirs(folder_path)
     print(f"Cleaned output folder: {folder_path}")
 
-# TODO remove tqdm
 def extract_frames(video_path, output_folder, skip_frames, ssim_threshold ):
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
@@ -242,7 +241,6 @@ def remove_duplicate_frames_gpt(folder_path, prompt):
     print(f"Finished remove_duplicate_frames_gpt function, {len(unique_images)} unique images remain")
     return unique_images
 
-# TODO: combine system and user prompt
 def summarize_transcript(transcript_path, prompt):
     print(f"Starting summarize_transcript function for {transcript_path}")
     try:
@@ -268,7 +266,6 @@ def summarize_transcript(transcript_path, prompt):
         print("Finished summarize_transcript function with errors")
         return None
 
-# TODO: combine system and user prompt
 def get_image_summaries(output_folder, transcript_summary, prompt):
     print("Starting get_image_summaries function")
     

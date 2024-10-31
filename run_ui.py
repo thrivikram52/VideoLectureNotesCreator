@@ -95,63 +95,47 @@ def create_streamlit_app():
         Expand each section below to view and modify the prompts.
         """)
         
-        # Summary Generation Prompts
-        with st.expander("📝 Summary Generation Prompts", expanded=False):
-            st.markdown("**Configure how summaries are generated**")
+        # Individual prompt expanders
+        with st.expander("📝 Transcript Summary Prompt", expanded=False):
             transcript_prompt = st.text_area(
-                "Transcript Summary Prompt", 
+                "Configure how transcript summaries are generated", 
                 value=TRANSCRIPT_PROMPT,
                 height=150,
                 help="Template for generating transcript summaries"
             )
-            
-            st.markdown("---")  # Separator
-            
+        
+        with st.expander("🖼️ Image Summary Prompt", expanded=False):
             image_summary_prompt = st.text_area(
-                "Image Summary Prompt", 
+                "Configure how image descriptions are generated", 
                 value=IMAGE_SUMMARY_PROMPT,
                 height=150,
                 help="Template for generating image descriptions"
             )
         
-        # Content Analysis Prompts
-        with st.expander("🔍 Content Analysis Prompts", expanded=False):
-            st.markdown("**Configure how content is analyzed and filtered**")
+        with st.expander("🔍 Meaningful Content Detection Prompt", expanded=False):
             meaningful_content_prompt = st.text_area(
-                "Meaningful Content Detection", 
+                "Configure how meaningful content is identified", 
                 value=MEANINGFUL_CONTENT_PROMPT,
                 height=150,
                 help="Helps identify meaningful content in scenes"
             )
-            
-            st.markdown("---")  # Separator
-            
+        
+        with st.expander("🎬 Duplicate Scene Detection Prompt", expanded=False):
             duplicate_detection_prompt = st.text_area(
-                "Duplicate Scene Detection", 
+                "Configure how duplicate scenes are detected", 
                 value=DUPLICATE_DETECTION_PROMPT,
                 height=150,
                 help="Guides the detection of duplicate scenes"
             )
 
-        # Add a "Reset Prompts" button
-        st.markdown("---")
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            if st.button("🔄 Reset All Prompts to Default", use_container_width=True):
-                transcript_prompt = TRANSCRIPT_PROMPT
-                image_summary_prompt = IMAGE_SUMMARY_PROMPT
-                meaningful_content_prompt = MEANINGFUL_CONTENT_PROMPT
-                duplicate_detection_prompt = DUPLICATE_DETECTION_PROMPT
-                st.experimental_rerun()
-
     # Add a separator before the process button
     st.markdown("---")
     
     # Center the process button and add output folder info
-    col1, col2, col3 = st.columns([1, 2, 1])
+    col1, col2, col3 = st.columns([3, 2, 3])
     with col2:
-        st.info("Files will be saved in the 'output' folder in the current directory")
-        process_button = st.button("▶️ Start Processing", type="primary", use_container_width=True)
+        st.info("Files will be saved in the 'output' folder")
+        process_button = st.button("▶️ Process", type="primary", use_container_width=True)
 
     if process_button:
         if not uploaded_video:
@@ -227,7 +211,7 @@ def create_streamlit_app():
             progress_bar.progress(40)
             meaningful_images = remove_unmeaningful_frames(
                 folder_path=output_folder,
-                prompt=meaningful_content_prompt
+                prompt=st.session_state.meaningful_content_prompt
             )
             results['num_meaningful_images'] = len(meaningful_images)
             checklist_items["remove_unmeaningful_frames"].markdown(f"✅ Analyze Content ({len(meaningful_images)} meaningful)")
@@ -237,7 +221,7 @@ def create_streamlit_app():
             progress_bar.progress(55)
             unique_scenes = remove_duplicate_frames_gpt(
                 folder_path=output_folder,
-                prompt=duplicate_detection_prompt
+                prompt=st.session_state.duplicate_detection_prompt
             )
             results['num_unique_scenes'] = len(unique_scenes)
             checklist_items["remove_duplicates"].markdown(f"✅ Remove Duplicates ({len(unique_scenes)} unique)")
@@ -247,7 +231,7 @@ def create_streamlit_app():
             progress_bar.progress(70)
             transcript_summary = summarize_transcript(
                 transcript_path=transcript_path,
-                prompt=transcript_prompt
+                prompt=st.session_state.transcript_prompt
             )
             results['has_transcript_summary'] = bool(transcript_summary)
             checklist_items["summarize_transcript"].markdown("✅ Summarize Transcript")
@@ -258,7 +242,7 @@ def create_streamlit_app():
             image_summaries = get_image_summaries(
                 output_folder=output_folder,
                 transcript_summary=transcript_summary,
-                prompt=image_summary_prompt
+                prompt=st.session_state.image_summary_prompt
             )
             results['num_image_summaries'] = len(image_summaries)
             checklist_items["generate_image_summary"].markdown(f"✅ Generate Summaries ({len(image_summaries)} images)")
