@@ -18,6 +18,8 @@ Video2FramesExtractor is a Python program that detects and extracts unique scene
 - scikit-image
 - tqdm
 
+brew install tesseract
+
 ## Installation
 
 1. Clone the repository or download the source code.

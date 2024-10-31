@@ -1,5 +1,22 @@
+# Core processing
 opencv-python
-numpy
-pytube
-scikit-image
-PyQt5
+numpy==1.24.3
+scipy==1.10.1
+scikit-image==0.20.0
+tqdm  # For progress bars
+Pillow  # For image handling
+
+# AI/ML
+openai==1.52.0
+whisper-openai
+
+# Text processing
+pytesseract  # For OCR
+beautifulsoup4  # For HTML parsing
+markdown2  # For markdown conversion
+
+# PDF Generation
+reportlab  # For PDF creation
+
+# UI
+streamlit  # For web interface
