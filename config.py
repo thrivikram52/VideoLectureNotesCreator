@@ -7,14 +7,29 @@ SSIM_THRESHOLD = 0.65
 FRAME_SKIP = 300
 CLEANUP_ENABLED = False
 
-# System Prompts
-TRANSCRIPT_SYSTEM_PROMPT = """As an instructor, generate a comprehensive summary that captures the key points and insights \
+TRANSCRIPT_PROMPT = """As an instructor, generate a comprehensive summary that captures the key points and insights \
+from the provided material. Focus on explaining concepts clearly and engagingly, ensuring that the content is informative \
+and easy to understand for the intended audience. Highlight important details, examples, and any relevant applications. \
+Aim for a concise yet thorough overview that could serve as a teaching aid.\
+Use markdown formatting for structure, including headers and numbering points where appropriate.
+
+Here's the transcript to summarize:
+
+{text}"""
+
+IMAGE_SUMMARY_PROMPT = """As an instructor, generate a comprehensive summary that captures the key points and insights \
 from the provided material. Focus on explaining concepts clearly and engagingly, ensuring that the content is informative \
 and easy to understand for the intended audience. Highlight important details, examples, and any relevant applications \
 without referring to the source material. Aim for a concise yet thorough overview that could serve as a teaching aid.\
-Use markdown formatting for structure, including headers and numbering points where appropriate."""
+Use markdown formatting for structure, including headers and numbering points where appropriate.
 
-IMAGE_SUMMARY_SYSTEM_PROMPT = TRANSCRIPT_SYSTEM_PROMPT  # Using the same prompt for consistency
+Based on this transcript summary:
+{transcript}
+
+Please provide a brief description of what is shown in the image {image}. 
+Focus on how it relates to the content of the transcript.
+Important: Do not mention or reference the image filename in your description. \
+Simply describe what you see and its relevance to the content."""
 
 MEANINGFUL_CONTENT_PROMPT = """Definition of Meaningful Content:\
 Meaningful content includes any text, diagrams, charts, images (beyond participant profile pictures), \
@@ -35,10 +50,3 @@ classify it as false otherwise true. You give only TRUE or FALSE(case sensitive)
 DUPLICATE_DETECTION_PROMPT = """Compare these two images and determine if they show the same content or slide. \
 Consider text, diagrams, and visual elements. Respond with only 'TRUE' if they are duplicates or 'FALSE' if they are different. \
 No explanation needed."""
-
-TRANSCRIPT_USER_PROMPT = """Please summarize the following transcript, ensuring that no details are missed. \
-:\n\n{text}"""
-
-IMAGE_SUMMARY_USER_PROMPT = """Based on this transcript summary:\n\n{transcript}\n\n\
-Please provide a brief description of what is shown in the image {image}. \
-Focus on how it relates to the content of the transcript"""

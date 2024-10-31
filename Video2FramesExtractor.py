@@ -137,7 +137,7 @@ def check_image_has_meaningful_content(image_path, prompt):
         print(f"Error analyzing image {image_path}: {str(e)}", file=sys.stderr)
         return None
 
-def remove_unmeaningful_scenes(folder_path, prompt):
+def remove_unmeaningful_frames(folder_path, prompt):
     print("Starting remove_non_meaningful_scenes function")
     image_files = [f for f in os.listdir(folder_path) if f.endswith('.png')]
     if not image_files:
@@ -152,7 +152,6 @@ def remove_unmeaningful_scenes(folder_path, prompt):
         image_path = os.path.join(folder_path, image_file)
         print(f"Processing {image_file}")
         has_meaningful_content = check_image_has_meaningful_content(image_path, prompt)
-        
         if has_meaningful_content == "TRUE":
             meaningful_images.append((image_file, has_meaningful_content))
             print(f"Keeping {image_file} as it has meaningful content")
@@ -168,14 +167,15 @@ def remove_unmeaningful_scenes(folder_path, prompt):
     print("Finished remove_non_meaningful_scenes function")
     return meaningful_images
 
-def remove_duplicate_scenes_gpt(folder_path, prompt):
-    print("Starting remove_duplicate_scenes_gpt function")
+def remove_duplicate_frames_gpt(folder_path, prompt):
+    print("Starting remove_duplicate_frames_gpt function")
     image_files = [f for f in os.listdir(folder_path) if f.endswith('.png')]
     if not image_files:
         print(f"No png files found in {folder_path}")
         return []
 
-    image_files.sort(key=lambda x: int(x.split('_')[1].split('.')[0]))
+    # Sort in reverse order (highest scene number to lowest)
+    image_files.sort(key=lambda x: int(x.split('_')[1].split('.')[0]), reverse=True)
     print(f"Found {len(image_files)} images to process for duplicates using GPT Vision")
 
     unique_images = []
@@ -239,24 +239,22 @@ def remove_duplicate_scenes_gpt(folder_path, prompt):
             os.remove(os.path.join(folder_path, image_file))
             print(f"Removed duplicate scene: {image_file}")
 
-    print(f"Finished remove_duplicate_scenes_gpt function, {len(unique_images)} unique images remain")
+    print(f"Finished remove_duplicate_frames_gpt function, {len(unique_images)} unique images remain")
     return unique_images
 
 # TODO: combine system and user prompt
-def summarize_transcript(transcript_path, system_prompt, user_prompt):
+def summarize_transcript(transcript_path, prompt):
     print(f"Starting summarize_transcript function for {transcript_path}")
     try:
         with open(transcript_path, 'r', encoding='utf-8') as file:
             full_text = file.read()
         
-        user_prompt = user_prompt.format(text=full_text)
-        system_prompt = system_prompt
+        formatted_prompt = prompt.format(text=full_text)
 
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
+                {"role": "user", "content": formatted_prompt}
             ],
             max_tokens=1000
         )
@@ -271,16 +269,14 @@ def summarize_transcript(transcript_path, system_prompt, user_prompt):
         return None
 
 # TODO: combine system and user prompt
-def get_image_summaries(output_folder, transcript_summary, system_prompt, user_prompt):
+def get_image_summaries(output_folder, transcript_summary, prompt):
     print("Starting get_image_summaries function")
     
-    # Get all PNG files from the output folder
     image_files = [f for f in os.listdir(output_folder) if f.endswith('.png')]
     if not image_files:
         print(f"No png files found in {output_folder}")
         return []
         
-    # Sort images by scene number
     image_files.sort(key=lambda x: int(x.split('_')[1].split('.')[0]))
     print(f"Found {len(image_files)} images to process")
     
@@ -290,12 +286,11 @@ def get_image_summaries(output_folder, transcript_summary, system_prompt, user_p
         image_path = os.path.join(output_folder, image_file)
         
         try:
-            user_prompt_text = user_prompt.format(transcript=transcript_summary, image=image_file)
+            formatted_prompt = prompt.format(transcript=transcript_summary, image=image_file)
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt_text}
+                    {"role": "user", "content": formatted_prompt}
                 ],
                 max_tokens=200
             )
@@ -312,26 +307,59 @@ def get_image_summaries(output_folder, transcript_summary, system_prompt, user_p
 
 #TODO styles shall be passed from the caller
 def markdown_to_pdf_elements(markdown_text, styles):
+    # Convert markdown to HTML
     html_content = markdown2.markdown(markdown_text)
     
-    # Use BeautifulSoup to parse and clean up the HTML
+    # Use BeautifulSoup to parse the HTML
     soup = BeautifulSoup(html_content, 'html.parser')
     
     elements = []
     
-    for element in soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'li']):
+    # Process each element only once
+    for element in soup.children:
+        # Skip if it's just a string or empty
+        if isinstance(element, str) or not element.name:
+            continue
+            
         if element.name.startswith('h'):
+            # Handle headers
             level = int(element.name[1])
-            text = element.get_text()
-            elements.append(Paragraph(text, styles[f'Heading{level}']))
+            style_name = f'Heading{level}' if level <= 6 else 'Heading6'
+            elements.append(Paragraph(
+                element.get_text().strip(),
+                styles[style_name]
+            ))
+            
         elif element.name == 'p':
-            text = element.get_text()
-            elements.append(Paragraph(text, styles['BodyText']))
-        elif element.name == 'li':
-            text = '• ' + element.get_text()
-            elements.append(Paragraph(text, styles['BodyText']))
+            # Handle paragraphs
+            text = element.get_text().strip()
+            if text:  # Only add non-empty paragraphs
+                elements.append(Paragraph(
+                    text,
+                    styles['BodyText']
+                ))
+                
+        elif element.name == 'ul':
+            # Handle unordered lists
+            for li in element.find_all('li', recursive=False):
+                text = '• ' + li.get_text().strip()
+                elements.append(Paragraph(
+                    text,
+                    styles['BodyText']
+                ))
+                
+        elif element.name == 'ol':
+            # Handle ordered lists
+            for i, li in enumerate(element.find_all('li', recursive=False), 1):
+                text = f"{i}. {li.get_text().strip()}"
+                elements.append(Paragraph(
+                    text,
+                    styles['BodyText']
+                ))
         
-        elements.append(Spacer(1, 0.1*inch))
+        # Add spacing after each element
+        if elements:  # Only add spacer if we added an element
+            elements.append(Spacer(1, 0.1*inch))
     
     return elements
 
