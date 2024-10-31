@@ -290,7 +290,7 @@ def summarize_transcript(transcript_path, prompt):
 def get_image_summaries(output_folder, transcript_summary, prompt):
     print("Starting get_image_summaries function")
     
-    image_files = [f for f in os.listdir(folder_path) if f.endswith('.png')]
+    image_files = [f for f in os.listdir(output_folder) if f.endswith('.png')]
     if not image_files:
         print(f"No png files found in {output_folder}")
         return []
