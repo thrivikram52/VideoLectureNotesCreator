@@ -7,7 +7,7 @@ SSIM_THRESHOLD = 0.65
 FRAME_SKIP = 300
 CLEANUP_ENABLED = False
 
-TRANSCRIPT_PROMPT = """As an instructor, generate a comprehensive summary that captures the key points and insights \
+TRANSCRIPT_SUMMARY_PROMPT = """As an instructor, generate a comprehensive summary that captures the key points and insights \
 from the provided material. Focus on explaining concepts clearly and engagingly, ensuring that the content is informative \
 and easy to understand for the intended audience. Highlight important details, examples, and any relevant applications. \
 Aim for a concise yet thorough overview that could serve as a teaching aid.\
@@ -31,7 +31,7 @@ Focus on how it relates to the content of the transcript.
 Important: Do not mention or reference the image filename in your description. \
 Simply describe what you see and its relevance to the content."""
 
-MEANINGFUL_CONTENT_PROMPT = """Definition of Meaningful Content:\
+REMOVE_UNMEANINGFUL_FRAMES_PROMPT = """Definition of Meaningful Content:\
 Meaningful content includes any text, diagrams, charts, images (beyond participant profile pictures), \
 tables, or visual elements that provide valuable information or insights. This content should contribute \
 directly to the understanding or learning points you want to cover in your lecture notes. \
@@ -47,6 +47,6 @@ If the slide contains only people's images or does not have useful content, \
 classify it as false otherwise true. You give only TRUE or FALSE(case sensitive). Do not give explanation.\
 """
 
-DUPLICATE_DETECTION_PROMPT = """Compare these two images and determine if they show the same content or slide. \
+DUPLICATE_FRAMES_DETECTION_PROMPT = """Compare these two images and determine if they show the same content or slide. \
 Consider text, diagrams, and visual elements. Respond with only 'TRUE' if they are duplicates or 'FALSE' if they are different. \
 No explanation needed."""
