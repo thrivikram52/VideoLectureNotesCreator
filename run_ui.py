@@ -73,6 +73,14 @@ def create_streamlit_app():
     st.markdown("---")
     st.subheader("3️⃣ Select Stages to Run")
     
+    # Add information about folder cleanup behavior
+    st.info("""
+    📂 **Output Folder Behavior:**
+    - If **all stages** are selected: The output folder will be cleaned for a fresh start
+    - If **Transcribe** or **Extract Frames** is selected: The output folder will be cleaned
+    - Otherwise: Existing files will be preserved and reused
+    """)
+    
     # Create columns for stage selection checkboxes
     stage_cols = st.columns(2)
     with stage_cols[0]:
@@ -89,6 +97,15 @@ def create_streamlit_app():
             "create_pdf": st.checkbox("Create PDF Report", value=True),
             "cleanup": st.checkbox("Cleanup", value=True),
         })
+
+    # Add dynamic warning based on selection
+    all_stages_enabled = all(stages.values())
+    initial_stages_enabled = stages["transcribe"] or stages["extract_frames"]
+    
+    if all_stages_enabled:
+        st.warning("⚠️ All stages selected: Output folder will be cleaned for a fresh start")
+    elif initial_stages_enabled:
+        st.warning("⚠️ Initial stages selected: Output folder will be cleaned")
 
     # Create two columns for parameters and prompts
     st.markdown("---")  # Add a separator line
