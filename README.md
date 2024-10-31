@@ -1,22 +1,29 @@
-# Video2FramesExtractor
+# Video Lecture Notes Creator
 
-Video2FramesExtractor is a Python program that detects and extracts unique scenes from a video file. It uses structural similarity index (SSIM) to identify significant changes between frames, allowing for efficient scene detection and extraction.
+A Streamlit-based application that processes video lectures to automatically generate structured notes with key frames and summaries.
 
 ## Features
 
-- Automatic scene detection based on structural similarity
-- Customizable sensitivity and frame skip settings
-- Progress bar for visual feedback during processing
-- Outputs individual frames as PNG images
-- Supports various video formats
+- 🎥 Video Processing
+  - Supports MP4, AVI, and MOV formats
+  - Automatic transcription generation
+  - Optional manual transcript upload
+  - Intelligent frame extraction and analysis
+
+- 🤖 AI-Powered Analysis
+  - Removes unmeaningful and duplicate frames
+  - Generates smart summaries of transcripts
+  - Creates contextual descriptions for key frames
+  - Customizable AI prompts for different processing stages
+
+- 📄 Output Generation
+  - Creates a PDF report combining visual and text summaries
+  - Includes both transcript and key frame analysis
+  - Downloadable transcript and final report
 
 ## Requirements
 
 - Python 3.6+
-- OpenCV
-- NumPy
-- scikit-image
-- tqdm
 
 brew install tesseract
 
@@ -25,39 +32,80 @@ brew install tesseract
 1. Clone the repository or download the source code.
 2. Create a virtual environment on Mac as follows
 
-python -m venv Video2FramesExtractor
-source Video2FramesExtractor/bin/activate
+python -m venv VideoLectureNotesCreator
+source VideoLectureNotesCreator/bin/activate
 
 On Windows
-python -m venv Video2FramesExtractor
-Video2FramesExtractor\Scripts\activate
+python -m venv VideoLectureNotesCreator
+VideoLectureNotesCreator\Scripts\activate
 
 
 3. Install the required dependencies:
 pip install -r requirements.txt
 
 ## Usage
+Export open AI API Key on terminal
+export OPENAI_API_KEY={KEY}
 
-1. Place your video file in the same directory as the script, or update the `video_path` variable in the script with the path to your video file.
-
-2. Run the script:
-python Video2FramesExtractor.py
-
-Run the same functionality from UI using below command
-python Video2FramesExtractorUI.py
-
-3. The script will process the video and save detected scenes as PNG images in the `scenes` folder.
-
-## Configuration
-
-You can adjust the following parameters in the script to fine-tune the scene detection:
-
-- `SSIM_THRESHOLD`: Adjust this value to change the sensitivity of scene detection. Lower values will detect more subtle changes. 
-For Academic Videos which has animation prefer to give 0.8 as SSIM Threshold
-For Zoom meetings explaining about some architecture prefer to give 0.65 as SSIM Threshold
-It varies between -1 to 1
-
-- `FRAME_SKIP`: Change this value to process frames at different intervals. Higher values will speed up processing but may miss short scenes.
-- `MIN_SCENE_DURATION`: Set the minimum time (in seconds) between saved frames to avoid saving too similar scenes.
+Run the streamlit app
+streamlit run run_ui.py
 
 
+2. Configure Processing Parameters:
+   - **SSIM Threshold** (0.0-1.0): Controls scene detection sensitivity
+   - **Frame Skip**: Number of frames to skip during analysis
+   - **Cleanup**: Toggle temporary file removal
+
+3. Customize AI Prompts (Optional):
+   - Transcript Summary Prompt
+   - Image Summary Prompt
+   - Unmeaningful Frames Detection Prompt
+   - Duplicate Frames Detection Prompt
+
+4. Upload and Process:
+   - Upload your video file
+   - Optionally upload a pre-existing transcript
+   - Click "Process" to start the pipeline
+
+## Processing Pipeline
+
+1. **Video Upload & Transcription**
+   - Processes uploaded video
+   - Generates or uses provided transcript
+
+2. **Frame Analysis**
+   - Extracts key frames
+   - Removes unmeaningful content
+   - Eliminates duplicate scenes
+
+3. **Content Generation**
+   - Summarizes transcript
+   - Generates descriptions for key frames
+   - Creates comprehensive PDF report
+
+4. **Output**
+   - Downloadable transcript
+   - PDF report with annotated frames and summaries
+
+## Output Structure
+
+The application creates an `output` folder containing:
+- Extracted frames
+- Video transcript
+- Final PDF report
+- Temporary processing files (if cleanup is disabled)
+
+## Requirements
+
+- Python 3.7+
+- Streamlit
+- OpenAI API access
+- FFmpeg (for video processing)
+- Additional dependencies listed in requirements.txt
+
+## Notes
+
+- Processing time varies based on video length and quality
+- Internet connection required for AI processing
+- Ensure sufficient disk space for temporary files
+- API keys should be configured in environment variables
