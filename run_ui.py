@@ -1,6 +1,6 @@
 import streamlit as st
 import os
-from Video2FramesExtractor import (
+from VideoLectureNotesCreator import (
     transcribe_video,
     extract_frames,
     remove_unmeaningful_frames,
