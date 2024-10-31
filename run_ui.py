@@ -34,24 +34,40 @@ def create_streamlit_app():
     with st.container():
         st.header("Setup")
         
-        # Video File Selection
-        st.subheader("1️⃣ Upload Video")
-        uploaded_video = st.file_uploader(
-            "Select your video file (MP4, AVI, or MOV)", 
-            type=['mp4', 'avi', 'mov']
-        )
+        col1, col2 = st.columns(2)
         
-        if uploaded_video:
-            st.success(f"✅ Video selected: {uploaded_video.name}")
-            # Display video details
-            st.info(f"""
-            **Video Details:**
-            - Name: {uploaded_video.name}
-            - Size: {uploaded_video.size/1024/1024:.2f} MB
-            - Type: {uploaded_video.type}
-            """)
-        else:
-            st.warning("⚠️ Please upload a video file to begin")
+        with col1:
+            # Video File Selection
+            st.subheader("1️⃣ Upload Video")
+            uploaded_video = st.file_uploader(
+                "Select your video file (MP4, AVI, or MOV)", 
+                type=['mp4', 'avi', 'mov']
+            )
+            
+            if uploaded_video:
+                st.success(f"✅ Video selected: {uploaded_video.name}")
+                # Display video details
+                st.info(f"""
+                **Video Details:**
+                - Name: {uploaded_video.name}
+                - Size: {uploaded_video.size/1024/1024:.2f} MB
+                - Type: {uploaded_video.type}
+                """)
+            else:
+                st.warning("⚠️ Please upload a video file to begin")
+
+        with col2:
+            # Optional Transcript Upload
+            st.subheader("2️⃣ Upload Transcript (Optional)")
+            uploaded_transcript = st.file_uploader(
+                "Select transcript file (TXT)", 
+                type=['txt']
+            )
+            
+            if uploaded_transcript:
+                st.success(f"✅ Transcript selected: {uploaded_transcript.name}")
+            else:
+                st.info("ℹ️ Transcript will be generated automatically if not provided")
 
     # Create two columns for parameters and prompts
     st.markdown("---")  # Add a separator line
@@ -197,13 +213,23 @@ def create_streamlit_app():
             # Save the video again after cleaning
             with open(video_path, "wb") as f:
                 f.write(uploaded_video.getbuffer())
-            # Step 1: Transcribe video
-            status_text.text("Transcribing video...")
-            progress_bar.progress(10)
-            transcript_path = transcribe_video(video_path, output_folder)
+
+            # Handle transcript
+            if uploaded_transcript:
+                # Save uploaded transcript
+                transcript_path = os.path.join(output_folder, "transcript.txt")
+                with open(transcript_path, "wb") as f:
+                    f.write(uploaded_transcript.getbuffer())
+                checklist_items["transcribe"].markdown("✅ Using Uploaded Transcript")
+            else:
+                # Generate transcript
+                status_text.text("Transcribing video...")
+                progress_bar.progress(10)
+                transcript_path = transcribe_video(video_path, output_folder)
+                checklist_items["transcribe"].markdown("✅ Generated Transcript")
+
             results['transcript_path'] = transcript_path
-            checklist_items["transcribe"].markdown("✅ Transcribe Video")
-            
+
             # Step 2: Extract frames
             status_text.text("Detecting scenes...")
             progress_bar.progress(25)
