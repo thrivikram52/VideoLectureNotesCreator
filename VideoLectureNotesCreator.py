@@ -148,6 +148,14 @@ def check_image_has_meaningful_content(image_path, prompt):
         print(f"Error analyzing image {image_path}: {str(e)}", file=sys.stderr)
         return None
 
+def extract_scene_number(filename):
+    """Helper function to safely extract scene number from filename"""
+    try:
+        # Extract number between 'scene_' and '.png'
+        return int(filename.split('_')[1].split('.')[0])
+    except (IndexError, ValueError):
+        return 0
+
 def remove_unmeaningful_frames(folder_path, prompt):
     print("Starting remove_non_meaningful_scenes function")
     image_files = [f for f in os.listdir(folder_path) if f.endswith('.png')]
@@ -155,7 +163,8 @@ def remove_unmeaningful_frames(folder_path, prompt):
         print(f"No png files found in {folder_path}")
         return []
 
-    image_files.sort(key=lambda x: int(x.split('_')[1].split('.')[0]))
+    # Use the safe sorting function
+    image_files.sort(key=extract_scene_number)
     print(f"Found {len(image_files)} images to process")
 
     meaningful_images = []
@@ -185,8 +194,8 @@ def remove_duplicate_frames_gpt(folder_path, prompt):
         print(f"No png files found in {folder_path}")
         return []
 
-    # Sort in reverse order (highest scene number to lowest)
-    image_files.sort(key=lambda x: int(x.split('_')[1].split('.')[0]), reverse=True)
+    # Sort in reverse order using the safe sorting function
+    image_files.sort(key=extract_scene_number, reverse=True)
     print(f"Found {len(image_files)} images to process for duplicates using GPT Vision")
 
     unique_images = []
@@ -281,12 +290,13 @@ def summarize_transcript(transcript_path, prompt):
 def get_image_summaries(output_folder, transcript_summary, prompt):
     print("Starting get_image_summaries function")
     
-    image_files = [f for f in os.listdir(output_folder) if f.endswith('.png')]
+    image_files = [f for f in os.listdir(folder_path) if f.endswith('.png')]
     if not image_files:
         print(f"No png files found in {output_folder}")
         return []
         
-    image_files.sort(key=lambda x: int(x.split('_')[1].split('.')[0]))
+    # Use the safe sorting function
+    image_files.sort(key=extract_scene_number)
     print(f"Found {len(image_files)} images to process")
     
     image_summaries = []

@@ -76,30 +76,29 @@ def create_streamlit_app():
     with col1:
         st.subheader("2️⃣ Processing Parameters")
         
-        # Add an info box explaining parameters
-        st.info("""
-        Configure the core processing parameters that control how your video 
-        is analyzed and processed. Adjust these values based on your needs.
-        """)
-        
-        ssim_threshold = st.slider(
-            "SSIM Threshold", 
-            min_value=0.0, 
-            max_value=1.0, 
-            value=SSIM_THRESHOLD,
-            help="Controls how different frames need to be to be considered unique scenes."
-        )
-        
-        frame_skip = st.number_input(
-            "Frame Skip", 
-            min_value=1, 
-            value=FRAME_SKIP,
-            help="Number of frames to skip between analyses."
-        )
-        
+        # Add input validation for numeric parameters
+        try:
+            ssim_threshold = st.slider(
+                "SSIM Threshold", 
+                min_value=0.0, 
+                max_value=1.0, 
+                value=float(SSIM_THRESHOLD),  # Convert to float
+                help="Controls how different frames need to be to be considered unique scenes."
+            )
+            
+            frame_skip = st.number_input(
+                "Frame Skip", 
+                min_value=1, 
+                value=int(FRAME_SKIP),  # Convert to integer
+                help="Number of frames to skip between analyses."
+            )
+        except ValueError as e:
+            st.error("Invalid value in config for SSIM_THRESHOLD or FRAME_SKIP. Please check your config file.")
+            return
+
         cleanup = st.checkbox(
             "Enable Cleanup", 
-            value=CLEANUP_ENABLED,
+            value=bool(CLEANUP_ENABLED),  # Convert to boolean
             help="Remove temporary files after processing"
         )
 
