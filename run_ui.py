@@ -29,10 +29,40 @@ def create_streamlit_app():
     st.set_page_config(page_title="Video Processing Pipeline", layout="wide")
     st.title("Video Processing Pipeline")
 
-    # Create tabs for the two phases
-    phase1, phase2 = st.tabs(["📽️ Phase 1: Frame Extraction & Review", "📄 Phase 2: Generate Notes"])
+    # API Key Configuration
+    with st.sidebar:
+        st.header("🔑 API Configuration")
+        api_key = st.text_input(
+            "Enter OpenAI API Key",
+            type="password",
+            help="Your OpenAI API key is required for transcript summarization and image analysis",
+            value=st.session_state.get('api_key', '')
+        )
+        
+        if api_key:
+            st.session_state['api_key'] = api_key
+            os.environ['OPENAI_API_KEY'] = api_key
+            st.success("✅ API Key set successfully!")
+        else:
+            st.warning("⚠️ Please enter your OpenAI API Key to use GPT features")
 
-    with phase1:
+    # Check for API key before proceeding
+    if not api_key:
+        st.error("Please enter your OpenAI API Key in the sidebar to continue")
+        return
+
+    # Initialize tab state if not exists
+    if 'active_tab' not in st.session_state:
+        st.session_state.active_tab = "Phase 1"
+
+    # Create tabs for the two phases
+    tab1, tab2 = st.tabs(["📽️ Phase 1: Frame Extraction & Review", "📄 Phase 2: Generate Notes"])
+    
+    # Set active tab
+    if st.session_state.active_tab == "Phase 2":
+        tab2.active = True
+
+    with tab1:
         st.header("Phase 1: Frame Extraction & Manual Review")
         
         # Step 1: Video Upload
@@ -152,10 +182,16 @@ def create_streamlit_app():
                                             st.rerun()
                                         except Exception as e:
                                             st.error(f"Error deleting {image_files[idx]}: {str(e)}")
+                    
+                    
+                    # Create columns for the navigation section
+                    nav_col1, nav_col2 = st.columns([2, 1])
+                    with nav_col1:
+                        st.info("👉 Click on the 'Phase 2: Generate Notes' tab above to proceed with note generation.")
                 else:
                     st.warning("No frames found. Please extract frames first.")
 
-    with phase2:
+    with tab2:
         st.header("Phase 2: Generate Notes")
         
         # Check if Phase 1 is completed

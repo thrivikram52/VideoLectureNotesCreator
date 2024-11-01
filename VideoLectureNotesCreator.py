@@ -262,108 +262,102 @@ def remove_duplicate_frames_gpt(folder_path, prompt):
     print(f"Finished remove_duplicate_frames_gpt function, {len(unique_images)} unique images remain")
     return unique_images
 
-def summarize_transcript(transcript_path, prompt):
+def summarize_transcript(transcript_path: str, prompt: str) -> str:
     """
-    Summarizes the transcript and saves the summary
+    Summarize transcript using GPT
     """
-    print("Starting summarize_transcript function")
     try:
-        with open(transcript_path, 'r', encoding='utf-8') as f:
-            full_text = f.read()
-            
+        # Initialize OpenAI client with API key
+        client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+        
+        with open(transcript_path, 'r') as f:
+            transcript = f.read()
+        
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4",  # or "gpt-3.5-turbo"
             messages=[
-                {"role": "user", "content": prompt + "\n\n" + full_text}
-            ],
-            max_tokens=500
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": transcript}
+            ]
         )
         
-        summary = response.choices[0].message.content
-        
-        # Save summary to file
-        output_folder = os.path.dirname(transcript_path)
-        summary_path = os.path.join(output_folder, "transcript_summary.txt")
-        with open(summary_path, "w", encoding="utf-8") as f:
-            f.write(summary)
-            
-        print("Finished summarize_transcript function")
-        return summary
+        return response.choices[0].message.content
     except Exception as e:
-        print(f"Error summarizing transcript: {str(e)}", file=sys.stderr)
-        print(f"File content (first 100 characters): {full_text[:100]}", file=sys.stderr)
-        print("Finished summarize_transcript function with errors")
-        return None
+        raise Exception(f"Error in summarize_transcript: {str(e)}")
 
-def get_image_summaries(output_folder, transcript_summary, prompt):
+def get_image_summaries(output_folder: str, transcript_summary: str, prompt: str) -> dict:
     """
-    Generates and saves summaries for each image in the output folder
+    Generate summaries for images using GPT
     """
-    print("Starting get_image_summaries function")
-    
-    image_files = [f for f in os.listdir(output_folder) if f.endswith('.png')]
-    if not image_files:
-        print(f"No png files found in {output_folder}")
-        return []
+    try:
+        # Initialize OpenAI client with API key
+        client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
         
-    # Use the safe sorting function
-    image_files.sort(key=extract_scene_number)
-    print(f"Found {len(image_files)} images to process")
-    
-    image_summaries = []
-    
-    for image_file in image_files:
-        print(f"Generating summary for image: {image_file}")
-        image_path = os.path.join(output_folder, image_file)
+        image_files = [f for f in os.listdir(output_folder) if f.endswith('.png')]
+        if not image_files:
+            print(f"No png files found in {output_folder}")
+            return []
+            
+        # Use the safe sorting function
+        image_files.sort(key=extract_scene_number)
+        print(f"Found {len(image_files)} images to process")
         
-        try:
-            formatted_prompt = prompt.format(transcript=transcript_summary, image=image_file)
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "user", "content": formatted_prompt}
-                ],
-                max_tokens=200
-            )
+        image_summaries = []
+        
+        for image_file in image_files:
+            print(f"Generating summary for image: {image_file}")
+            image_path = os.path.join(output_folder, image_file)
             
-            summary = response.choices[0].message.content
-            image_summaries.append((image_file, summary))
-            
-            # Save individual summary file directly in output folder
-            # Convert scene_1.png to scene_1_summary.txt
-            summary_filename = image_file.replace('.png', '_summary.txt')
-            summary_path = os.path.join(output_folder, summary_filename)
-            
-            with open(summary_path, "w", encoding="utf-8") as f:
-                f.write(f"Image: {image_file}\n")
-                f.write(f"Scene Number: {extract_scene_number(image_file)}\n")
-                f.write("-" * 50 + "\n")
-                f.write("Summary:\n")
-                f.write(summary)
-            
-            print(f"Saved summary for {image_file} to {summary_path}")
-            
-        except Exception as e:
-            print(f"Error generating summary for {image_file}: {str(e)}")
-            # Save error information in output folder
-            error_filename = image_file.replace('.png', '_error.txt')
-            error_path = os.path.join(output_folder, error_filename)
-            with open(error_path, "w", encoding="utf-8") as f:
-                f.write(f"Error processing {image_file}: {str(e)}")
-            continue
+            try:
+                formatted_prompt = prompt.format(transcript=transcript_summary, image=image_file)
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "user", "content": formatted_prompt}
+                    ],
+                    max_tokens=400
+                )
+                
+                summary = response.choices[0].message.content
+                image_summaries.append((image_file, summary))
+                
+                # Save individual summary file directly in output folder
+                # Convert scene_1.png to scene_1_summary.txt
+                summary_filename = image_file.replace('.png', '_summary.txt')
+                summary_path = os.path.join(output_folder, summary_filename)
+                
+                with open(summary_path, "w", encoding="utf-8") as f:
+                    f.write(f"Image: {image_file}\n")
+                    f.write(f"Scene Number: {extract_scene_number(image_file)}\n")
+                    f.write("-" * 50 + "\n")
+                    f.write("Summary:\n")
+                    f.write(summary)
+                
+                print(f"Saved summary for {image_file} to {summary_path}")
+                
+            except Exception as e:
+                print(f"Error generating summary for {image_file}: {str(e)}")
+                # Save error information in output folder
+                error_filename = image_file.replace('.png', '_error.txt')
+                error_path = os.path.join(output_folder, error_filename)
+                with open(error_path, "w", encoding="utf-8") as f:
+                    f.write(f"Error processing {image_file}: {str(e)}")
+                continue
 
-    # Create an index file in output folder
-    index_path = os.path.join(output_folder, "summaries_index.txt")
-    with open(index_path, "w", encoding="utf-8") as f:
-        f.write("Image Summaries Index\n")
-        f.write("=" * 20 + "\n\n")
-        for image_file, _ in image_summaries:
-            summary_filename = image_file.replace('.png', '_summary.txt')
-            f.write(f"- {image_file} -> {summary_filename}\n")
+        # Create an index file in output folder
+        index_path = os.path.join(output_folder, "summaries_index.txt")
+        with open(index_path, "w", encoding="utf-8") as f:
+            f.write("Image Summaries Index\n")
+            f.write("=" * 20 + "\n\n")
+            for image_file, _ in image_summaries:
+                summary_filename = image_file.replace('.png', '_summary.txt')
+                f.write(f"- {image_file} -> {summary_filename}\n")
 
-    print(f"Generated summaries for {len(image_summaries)} images")
-    print("Finished get_image_summaries function")
-    return image_summaries
+        print(f"Generated summaries for {len(image_summaries)} images")
+        print("Finished get_image_summaries function")
+        return image_summaries
+    except Exception as e:
+        raise Exception(f"Error in get_image_summaries: {str(e)}")
 
 #TODO styles shall be passed from the caller
 def markdown_to_pdf_elements(markdown_text, styles):
