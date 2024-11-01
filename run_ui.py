@@ -9,7 +9,8 @@ from VideoLectureNotesCreator import (
     get_image_summaries,
     create_pdf_report,
     clean_output_folder,
-    get_output_folder
+    get_output_folder,
+    extract_scene_number
 )
 from config import *
 import tkinter as tk
@@ -25,425 +26,317 @@ def select_folder():
     return folder_path
 
 def create_streamlit_app():
-    st.set_page_config(
-        page_title="Video Processing Pipeline",
-        layout="wide",
-        initial_sidebar_state="collapsed"
-    )
-    
+    st.set_page_config(page_title="Video Processing Pipeline", layout="wide")
     st.title("Video Processing Pipeline")
-    
-    # Create a container for file selection
-    with st.container():
-        st.header("Setup")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Video File Selection
-            st.subheader("1️⃣ Upload Video")
-            uploaded_video = st.file_uploader(
-                "Select your video file (MP4, AVI, or MOV) *", 
-                type=['mp4', 'avi', 'mov']
-            )
-            
-            if uploaded_video:
-                st.success(f"✅ Video selected: {uploaded_video.name}")
-                # Display video details
-                st.info(f"""
-                **Video Details:**
-                - Name: {uploaded_video.name}
-                - Size: {uploaded_video.size/1024/1024:.2f} MB
-                - Type: {uploaded_video.type}
-                """)
-            else:
-                st.warning("⚠️ Please upload a video file to begin - This is required!")
 
-        with col2:
-            # Optional Transcript Upload
-            st.subheader("2️⃣ Upload Transcript (Optional)")
-            uploaded_transcript = st.file_uploader(
-                "Select transcript file (TXT)", 
-                type=['txt']
-            )
-            
-            if uploaded_transcript:
-                st.success(f"✅ Transcript selected: {uploaded_transcript.name}")
-            else:
-                st.info("ℹ️ Transcript will be generated automatically if not provided")
+    # Create tabs for the two phases
+    phase1, phase2 = st.tabs(["📽️ Phase 1: Frame Extraction & Review", "📄 Phase 2: Generate Notes"])
 
-    # Add stage selection before the processing parameters
-    st.markdown("---")
-    st.subheader("3️⃣ Select Stages to Run")
-    
-    # Add information about folder cleanup behavior
-    st.info("""
-    📂 **Output Folder Behavior:**
-    - If **all stages** are selected: A fresh folder will be created
-    - Otherwise: Existing files will be preserved and reused
-    """)
-    
-    # Create columns for stage selection checkboxes
-    stage_cols = st.columns(2)
-    with stage_cols[0]:
-        stages = {
-            "transcribe": st.checkbox("Transcribe Video", value=True),
-            "extract_frames": st.checkbox("Extract Frames", value=True),
-            "remove_unmeaningful": st.checkbox("Remove Unmeaningful Frames", value=True),
-            "remove_duplicates": st.checkbox("Remove Duplicates", value=True),
-        }
-    with stage_cols[1]:
-        stages.update({
-            "summarize_transcript": st.checkbox("Summarize Transcript", value=True),
-            "generate_summaries": st.checkbox("Generate Image Summaries", value=True),
-            "create_pdf": st.checkbox("Create PDF Report", value=True)
-        })
-
-    # Create two columns for parameters and prompts
-    st.markdown("---")  # Add a separator line
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("4️⃣ Processing Parameters")
+    with phase1:
+        st.header("Phase 1: Frame Extraction & Manual Review")
         
-        # Add input validation for numeric parameters
-        try:
-            ssim_threshold = st.slider(
-                "SSIM Threshold", 
-                min_value=0.0, 
-                max_value=1.0, 
-                value=float(SSIM_THRESHOLD),  # Convert to float
-                help="Controls how different frames need to be to be considered unique scenes."
-            )
-            
-            frame_skip = st.number_input(
-                "Frame Skip", 
-                min_value=1, 
-                value=int(FRAME_SKIP),  # Convert to integer
-                help="Number of frames to skip between analyses."
-            )
-        except ValueError as e:
-            st.error("Invalid value in config for SSIM_THRESHOLD or FRAME_SKIP. Please check your config file.")
-            return
-
-    with col2:
-        st.subheader("5️⃣ Prompts Configuration")
+        # Step 1: Video Upload
+        st.markdown("---")
+        st.subheader("1️⃣ Upload Video")
+        uploaded_video = st.file_uploader(
+            "Select your video file (MP4, AVI, or MOV) *", 
+            type=['mp4', 'avi', 'mov']
+        )
         
-        st.info("""
-        Customize the AI prompts used for different stages of processing. 
-        Expand each section below to view and modify the prompts.
-        """)
-        
-        # Initialize session state for prompts
-        if 'transcript_summary_prompt' not in st.session_state:
-            st.session_state.transcript_summary_prompt = TRANSCRIPT_SUMMARY_PROMPT
-        if 'image_summary_prompt' not in st.session_state:
-            st.session_state.image_summary_prompt = IMAGE_SUMMARY_PROMPT
-        if 'remove_unmeaningful_frames_prompt' not in st.session_state:
-            st.session_state.remove_unmeaningful_frames_prompt = REMOVE_UNMEANINGFUL_FRAMES_PROMPT
-        if 'duplicate_frames_detection_prompt' not in st.session_state:
-            st.session_state.duplicate_frames_detection_prompt = DUPLICATE_FRAMES_DETECTION_PROMPT
-        
-        # Individual prompt expanders
-        with st.expander("📝 Transcript Summary Prompt", expanded=False):
-            st.session_state.transcript_summary_prompt = st.text_area(
-                "Configure how transcript summaries are generated", 
-                value=st.session_state.transcript_summary_prompt,
-                height=150,
-                help="Template for generating transcript summaries"
-            )
-        
-        with st.expander("🖼️ Image Summary Prompt", expanded=False):
-            st.session_state.image_summary_prompt = st.text_area(
-                "Configure how image descriptions are generated", 
-                value=st.session_state.image_summary_prompt,
-                height=150,
-                help="Template for generating image descriptions"
-            )
-        
-        with st.expander("🔍 Remove Unmeaningful Frames Prompt", expanded=False):
-            st.session_state.remove_unmeaningful_frames_prompt = st.text_area(
-                "Configure how unmeaningful frames are identified", 
-                value=st.session_state.remove_unmeaningful_frames_prompt,
-                height=150,
-                help="Helps identify and remove unmeaningful frames"
-            )
-        
-        with st.expander("🎬 Duplicate Frames Detection Prompt", expanded=False):
-            st.session_state.duplicate_frames_detection_prompt = st.text_area(
-                "Configure how duplicate frames are detected", 
-                value=st.session_state.duplicate_frames_detection_prompt,
-                height=150,
-                help="Guides the detection of duplicate frames"
-            )
-
-    # Add a separator before the process button
-    st.markdown("---")
-    
-    # Center the process button
-    col1, col2, col3 = st.columns([3, 2, 3])
-    with col2:
-        process_button = st.button("▶️ Process", type="primary", use_container_width=True)
-
-    if process_button:
-        if not uploaded_video:
-            st.error("Please upload a video file first! This is required.")
-            return
-            
-        # Get folder name from video
-        folder_name = get_output_folder(uploaded_video.name)
-        
-        # Check if all stages are selected
-        all_stages_enabled = all(stages.values())
-        initial_stages_enabled = stages["transcribe"] or stages["extract_frames"]
-        
-        if all_stages_enabled:
-            # Create new folder and clean it
-            if os.path.exists(folder_name):
-                st.info(f"📂 Creating fresh folder: {folder_name}")
-                clean_output_folder(folder_name)
-            else:
-                os.makedirs(folder_name)
-            output_folder = folder_name
+        if uploaded_video:
+            st.success(f"✅ Video selected: {uploaded_video.name}")
+            st.info(f"""
+            **Video Details:**
+            - Name: {uploaded_video.name}
+            - Size: {uploaded_video.size/1024/1024:.2f} MB
+            - Type: {uploaded_video.type}
+            """)
         else:
-            # Use existing folder if available
-            if not os.path.exists(folder_name):
-                st.error(f"Folder {folder_name} not found! Please run all stages first.")
-                return
-            output_folder = folder_name
-            st.info(f"📂 Using existing folder: {output_folder}")
-        
-        # Save uploaded video if needed for initial stages
-        if initial_stages_enabled:
-            video_path = os.path.join(output_folder, uploaded_video.name)
-            with open(video_path, "wb") as f:
-                f.write(uploaded_video.getbuffer())
+            st.warning("⚠️ Please upload a video file to begin - This is required!")
 
-        # Create progress containers
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-
-        # Create checklist container
-        st.markdown("### Processing Steps:")
-        checklist_cols = st.columns(2)
-        with checklist_cols[0]:
-            checklist_items = {
-                "transcribe": st.empty(),
-                "extract_frames": st.empty(),
-                "remove_unmeaningful_frames": st.empty(),
-                "remove_duplicates": st.empty(),
-            }
-        with checklist_cols[1]:
-            checklist_items.update({
-                "summarize_transcript": st.empty(),
-                "generate_image_summary": st.empty(),
-                "create_pdf": st.empty()
-            })
-        
-        # Initialize checklist
-        for key in checklist_items:
-            checklist_items[key].markdown("⬜ " + key.replace("_", " ").title())
-        
-        results = {'status': 'started'}
-        
-        try:
-            # Check if all stages are enabled
-            all_stages_enabled = all(stages.values())
-            
-            # Clean output folder if all stages are enabled or if initial stages are enabled
-            if all_stages_enabled or stages["transcribe"] or stages["extract_frames"]:
-                status_text.text("Cleaning output folder...")
-                st.warning("⚠️ Output folder will be cleaned and all existing files will be removed.")
-                clean_output_folder(output_folder)
-                if stages["extract_frames"]:
-                    with open(video_path, "wb") as f:
-                        f.write(uploaded_video.getbuffer())
-            else:
-                st.info("ℹ️ Using existing files in output folder where available.")
-
-            # Handle transcript
-            if stages["transcribe"]:
-                if uploaded_transcript:
-                    transcript_path = os.path.join(output_folder, "transcript.txt")
-                    with open(transcript_path, "wb") as f:
-                        f.write(uploaded_transcript.getbuffer())
-                    checklist_items["transcribe"].markdown("✅ Using Uploaded Transcript")
-                else:
-                    status_text.text("Transcribing video...")
-                    progress_bar.progress(10)
-                    transcript_path = transcribe_video(video_path, output_folder)
-                    checklist_items["transcribe"].markdown("✅ Generated Transcript")
-            else:
-                # Try to use existing transcript
-                transcript_path = os.path.join(output_folder, "transcript.txt")
-                if not os.path.exists(transcript_path):
-                    st.error("No transcript found! Enable transcription or upload a transcript.")
-                    return
-                checklist_items["transcribe"].markdown("⏭️ Using Existing Transcript")
-
-            results['transcript_path'] = transcript_path
-
-            # Extract frames
-            if stages["extract_frames"]:
-                status_text.text("Detecting scenes...")
-                progress_bar.progress(25)
-                num_scenes = extract_frames(
-                    video_path=video_path,
-                    output_folder=output_folder,
-                    skip_frames=frame_skip,
-                    ssim_threshold=ssim_threshold
-                )
-                results['num_scenes_detected'] = num_scenes
-                checklist_items["extract_frames"].markdown(f"✅ Extract Frames ({num_scenes} scenes)")
-            else:
-                checklist_items["extract_frames"].markdown("⏭️ Using Existing Frames")
-            
-            # Remove unmeaningful scenes
-            if stages["remove_unmeaningful"]:
-                status_text.text("Analyzing scenes for meaningful content...")
-                progress_bar.progress(40)
-                meaningful_images = remove_unmeaningful_frames(
-                    folder_path=output_folder,
-                    prompt=st.session_state.remove_unmeaningful_frames_prompt
-                )
-                results['num_meaningful_images'] = len(meaningful_images)
-                checklist_items["remove_unmeaningful_frames"].markdown(f"✅ Analyze Content ({len(meaningful_images)} meaningful)")
-            else:
-                checklist_items["remove_unmeaningful_frames"].markdown("⏭️ Skipped Content Analysis")
-        
-            # Remove duplicate scenes
-            if stages["remove_duplicates"]:
-                status_text.text("Removing duplicate scenes...")
-                progress_bar.progress(55)
-                unique_scenes = remove_duplicate_frames_gpt(
-                    folder_path=output_folder,
-                    prompt=st.session_state.duplicate_frames_detection_prompt
-                )
-                results['num_unique_scenes'] = len(unique_scenes)
-                checklist_items["remove_duplicates"].markdown(f"✅ Remove Duplicates ({len(unique_scenes)} unique)")
-            else:
-                checklist_items["remove_duplicates"].markdown("⏭️ Skipped Duplicate Removal")
-            
-            # Summarize transcript
-            if stages["summarize_transcript"]:
-                status_text.text("Summarizing transcript...")
-                progress_bar.progress(70)
-                transcript_summary = summarize_transcript(
-                    transcript_path=transcript_path,
-                    prompt=st.session_state.transcript_summary_prompt
-                )
-                # Save transcript summary
-                summary_path = os.path.join(output_folder, "transcript_summary.txt")
-                with open(summary_path, "w", encoding="utf-8") as f:
-                    f.write(transcript_summary)
-                results['has_transcript_summary'] = bool(transcript_summary)
-                checklist_items["summarize_transcript"].markdown("✅ Summarize Transcript")
-            else:
-                checklist_items["summarize_transcript"].markdown("⏭️ Skipped Transcript Summary")
-                transcript_summary = None
-            
-            # Get image summaries
-            if stages["generate_summaries"]:
-                status_text.text("Generating image summaries...")
-                progress_bar.progress(85)
-                image_summaries = get_image_summaries(
-                    output_folder=output_folder,
-                    transcript_summary=transcript_summary,
-                    prompt=st.session_state.image_summary_prompt
-                )
-                # Save image summaries
-                summaries_path = os.path.join(output_folder, "image_summaries.txt")
-                with open(summaries_path, "w", encoding="utf-8") as f:
-                    for image_file, summary in image_summaries:
-                        f.write(f"Image: {image_file}\n")
-                        f.write(f"Summary: {summary}\n")
-                        f.write("-" * 50 + "\n")
-                results['num_image_summaries'] = len(image_summaries)
-                checklist_items["generate_image_summary"].markdown(f"✅ Generate Summaries ({len(image_summaries)} images)")
-            else:
-                checklist_items["generate_image_summary"].markdown("⏭️ Skipped Image Summaries")
-                image_summaries = []
-            
-            # Create PDF report
-            if stages["create_pdf"]:
-                status_text.text("Creating PDF report...")
-                progress_bar.progress(95)
-                folder_name = os.path.basename(output_folder)
-                pdf_name = f"{folder_name}_notes.pdf"  # Create consistent PDF name
-                pdf_path = os.path.join(output_folder, pdf_name)
-                create_pdf_report(
-                    output_folder=output_folder,
-                    output_pdf=pdf_path
-                )
-                results['pdf_generated'] = True
-                checklist_items["create_pdf"].markdown("✅ Create PDF Report")
-            else:
-                checklist_items["create_pdf"].markdown("⏭️ Skipped PDF Creation")
-            
-            # Update final progress
-            progress_bar.progress(100)
-            status_text.text("Processing completed successfully!")
-            results['status'] = 'completed'
-            
-            # Display results and download buttons
-            st.success("Video processing completed!")
-            st.write("### Processing Results:")
-            for key, value in results.items():
-                if key != 'status':
-                    st.write(f"**{key}:** {value}")
-            
-            # Provide download links
-            st.write("### Download Files")
+        # Step 2: Frame Extraction Settings
+        st.markdown("---")
+        st.subheader("2️⃣ Frame Extraction Settings")
+        if uploaded_video:
+            # Create two columns for parameters
             col1, col2 = st.columns(2)
             
             with col1:
-                # Create zip file with folder name
-                folder_name = os.path.basename(output_folder)
-                zip_name = f"{folder_name}_complete.zip"
-                zip_path = os.path.join(output_folder, zip_name)
-                
-                with zipfile.ZipFile(zip_path, 'w') as zipf:
-                    for root, dirs, files in os.walk(output_folder):
-                        for file in files:
-                            # Skip the zip file itself and video files
-                            if file != zip_name and not file.endswith(('.mp4', '.avi', '.mov')):
-                                file_path = os.path.join(root, file)
-                                arcname = os.path.relpath(file_path, output_folder)
-                                zipf.write(file_path, arcname)
-                
-                with open(zip_path, "rb") as f:
-                    st.download_button(
-                        label="📦 Download Complete Output",
-                        data=f,
-                        file_name=zip_name,
-                        mime="application/zip",
-                        help="Download all files (transcripts, summaries, images, PDF) except the original video"
-                    )
+                ssim_threshold = st.slider(
+                    "SSIM Threshold", 
+                    min_value=0.0, 
+                    max_value=1.0, 
+                    value=float(SSIM_THRESHOLD),
+                    help="Lower values will extract more frames. Recommended: 0.5-0.8"
+                )
             
             with col2:
-                # Use the same PDF path that was created earlier
-                with open(pdf_path, "rb") as f:
-                    st.download_button(
-                        label="📄 Download PDF Notes Only",
-                        data=f,
-                        file_name=pdf_name,
-                        mime="application/pdf",
-                        help="Download only the final PDF report"
+                frame_skip = st.number_input(
+                    "Frame Skip Rate",
+                    min_value=1,
+                    max_value=300,
+                    value=int(FRAME_SKIP),
+                    help="Process every Nth frame. Higher values = fewer frames"
+                )
+
+            # Add explanation of parameters
+            st.info("""
+            **Parameter Guide:**
+            - **SSIM Threshold**: Controls how different frames need to be to be considered a new scene
+                - Lower values (0.3-0.5): More sensitive to changes, extracts more frames
+                - Higher values (0.7-0.9): Less sensitive, extracts fewer frames
+            - **Frame Skip Rate**: Process every Nth frame
+                - Lower values: More accurate but slower processing
+                - Higher values: Faster processing but might miss quick changes
+            """)
+
+            # Extract Frames Button
+            if st.button("🎬 Extract Frames", type="primary"):
+                with st.spinner("Extracting frames..."):
+                    try:
+                        output_folder = get_output_folder(uploaded_video.name)
+                        video_path = os.path.join(output_folder, uploaded_video.name)
+                        
+                        # Save uploaded video
+                        with open(video_path, "wb") as f:
+                            f.write(uploaded_video.getbuffer())
+                        
+                        # Show progress message
+                        progress_text = st.empty()
+                        progress_text.text("Analyzing video and extracting frames...")
+                        
+                        num_scenes = extract_frames(
+                            video_path=video_path,
+                            output_folder=output_folder,
+                            skip_frames=frame_skip,
+                            ssim_threshold=ssim_threshold
+                        )
+                        
+                        # Success message with stats
+                        st.success(f"""
+                        ✅ Frame extraction complete!
+                        - Extracted {num_scenes} unique scenes
+                        - Output folder: {output_folder}
+                        """)
+                        
+                    except Exception as e:
+                        st.error(f"❌ Error during frame extraction: {str(e)}")
+        else:
+            st.warning("Please upload a video first to configure frame extraction settings.")
+
+        # Step 3: Manual Frame Review
+        st.markdown("---")
+        st.subheader("3️⃣ Manual Frame Review")
+        if uploaded_video:
+            output_folder = get_output_folder(uploaded_video.name)
+            if os.path.exists(output_folder):
+                image_files = [f for f in os.listdir(output_folder) if f.endswith('.png')]
+                if image_files:
+                    st.info("👉 Review and delete any unwanted or duplicate frames below")
+                    image_files.sort(key=extract_scene_number)
+                    
+                    # Create a grid layout
+                    cols_per_row = 3
+                    for i in range(0, len(image_files), cols_per_row):
+                        cols = st.columns(cols_per_row)
+                        for j, col in enumerate(cols):
+                            idx = i + j
+                            if idx < len(image_files):
+                                image_path = os.path.join(output_folder, image_files[idx])
+                                with col:
+                                    st.image(image_path, caption=f"Scene {extract_scene_number(image_files[idx])}")
+                                    if st.button(f"🗑️ Delete", key=f"delete_{idx}"):
+                                        try:
+                                            os.remove(image_path)
+                                            st.success(f"Deleted {image_files[idx]}")
+                                            st.rerun()
+                                        except Exception as e:
+                                            st.error(f"Error deleting {image_files[idx]}: {str(e)}")
+                else:
+                    st.warning("No frames found. Please extract frames first.")
+
+    with phase2:
+        st.header("Phase 2: Generate Notes")
+        
+        # Check if Phase 1 is completed (but don't require frames)
+        if not uploaded_video:
+            st.error("⚠️ Please complete Phase 1 first! Upload a video.")
+            return
+            
+        output_folder = get_output_folder(uploaded_video.name)
+        
+        # Check for frames but don't block if none exist
+        has_frames = os.path.exists(output_folder) and any(f.endswith('.png') for f in os.listdir(output_folder))
+        if not has_frames:
+            st.warning("⚠️ No frames found. Will proceed with transcript processing only.")
+            
+        # Optional Transcript Upload
+        st.subheader("1️⃣ Transcript (Optional)")
+        uploaded_transcript = st.file_uploader(
+            "Upload transcript file or let the system generate one", 
+            type=['txt'],
+            key="transcript_uploader"
+        )
+        
+        if uploaded_transcript:
+            st.success(f"✅ Using uploaded transcript: {uploaded_transcript.name}")
+        
+        # Processing Steps
+        st.subheader("2️⃣ Configure Processing")
+        
+        # Create columns for options and progress
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            should_generate_transcript = not bool(uploaded_transcript) and st.checkbox("Generate Transcript", value=True)
+            should_summarize = st.checkbox("Summarize Transcript", value=True)
+            # Only show image summaries option if we have frames
+            should_generate_summaries = has_frames and st.checkbox("Generate Image Summaries", value=True)
+            should_create_pdf = st.checkbox("Create PDF Report", value=True)
+
+        # Prompt Configuration
+        st.subheader("3️⃣ Configure Prompts")
+        if should_summarize or should_generate_summaries:
+            with st.expander("📝 Prompts Configuration", expanded=False):
+                if should_summarize:
+                    transcript_prompt = st.text_area(
+                        "Transcript Summary Prompt",
+                        value=TRANSCRIPT_SUMMARY_PROMPT,
+                        key="transcript_summary_prompt"
+                    )
+                if should_generate_summaries and has_frames:
+                    image_prompt = st.text_area(
+                        "Image Summary Prompt",
+                        value=IMAGE_SUMMARY_PROMPT,
+                        key="image_summary_prompt"
+                    )
+
+        # Process Button
+        if st.button("▶️ Generate Notes", type="primary"):
+            try:
+                # Initialize progress tracking
+                progress = st.progress(0)
+                status_text = st.empty()
+                results = {}
+                
+                # Create checklist for tracking
+                checklist_items = {
+                    "transcribe": st.empty(),
+                    "summarize": st.empty(),
+                    "image_summaries": st.empty(),
+                    "create_pdf": st.empty()
+                }
+                
+                # 1. Handle Transcript
+                transcript_path = os.path.join(output_folder, "transcript.txt")
+                
+                if uploaded_transcript:
+                    status_text.text("Using uploaded transcript...")
+                    progress.progress(10)
+                    with open(transcript_path, "wb") as f:
+                        f.write(uploaded_transcript.getbuffer())
+                    checklist_items["transcribe"].markdown("✅ Using uploaded transcript")
+                
+                elif should_generate_transcript:
+                    status_text.text("Generating transcript... This may take a few minutes...")
+                    progress.progress(10)
+                    video_path = os.path.join(output_folder, uploaded_video.name)
+                    
+                    if not os.path.exists(video_path):
+                        raise Exception("Video file not found. Please upload the video again.")
+                        
+                    transcript_path = transcribe_video(
+                        video_path=video_path,
+                        output_folder=output_folder
                     )
                     
-        except Exception as e:
-            progress_bar.progress(100)
-            status_text.text("Processing failed!")
-            st.error(f"Error during processing: {str(e)}")
-            results['status'] = 'failed'
-            results['error'] = str(e)
-            
-            # Mark the failed step with a red X
-            for key, item in checklist_items.items():
-                current_text = item.markdown
-                if isinstance(current_text, str) and "✅" not in current_text:
-                    item.markdown(f"❌ {key.replace('_', ' ').title()} (Failed)")
+                    if os.path.exists(transcript_path):
+                        checklist_items["transcribe"].markdown("✅ Generated transcript")
+                    else:
+                        raise Exception("Transcript generation failed")
+                else:
+                    st.error("No transcript available. Please either upload a transcript or select 'Generate Transcript'")
+                    return
+                
+                # 2. Summarize Transcript
+                if should_summarize:
+                    status_text.text("Summarizing transcript...")
+                    progress.progress(30)
+                    transcript_summary = summarize_transcript(
+                        transcript_path=transcript_path,
+                        prompt=transcript_prompt
+                    )
+                    results['transcript_summary'] = transcript_summary
+                    checklist_items["summarize"].markdown("✅ Summarized transcript")
+                
+                # 3. Generate Image Summaries (only if frames exist)
+                if should_generate_summaries and has_frames:
+                    status_text.text("Generating image summaries...")
+                    progress.progress(60)
+                    image_summaries = get_image_summaries(
+                        output_folder=output_folder,
+                        transcript_summary=results.get('transcript_summary', ''),
+                        prompt=image_prompt
+                    )
+                    results['image_summaries'] = image_summaries
+                    checklist_items["image_summaries"].markdown("✅ Generated image summaries")
+                
+                # 4. Create PDF
+                if should_create_pdf:
+                    status_text.text("Creating PDF report...")
+                    progress.progress(90)
+                    pdf_path = create_pdf_report(
+                        output_folder=output_folder
+                    )
+                    results['pdf_path'] = pdf_path
+                    checklist_items["create_pdf"].markdown("✅ Created PDF report")
+                
+                # Complete
+                progress.progress(100)
+                status_text.text("✅ Processing complete!")
+                
+                # Show download section
+                st.markdown("---")
+                st.subheader("📥 Download Results")
+                
+                # Create and download zip of all artifacts
+                try:
+                    # Create a descriptive filename based on the video name
+                    video_name = os.path.splitext(uploaded_video.name)[0]
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    zip_filename = f"{video_name}_notes_{timestamp}.zip"
+                    zip_path = os.path.join(output_folder, "temp_artifacts.zip")
+                    
+                    with zipfile.ZipFile(zip_path, 'w') as zipf:
+                        for root, dirs, files in os.walk(output_folder):
+                            for file in files:
+                                file_path = os.path.join(root, file)
+                                if not (file.endswith(('.mp4', '.avi', '.mov')) or file == "temp_artifacts.zip"):
+                                    arcname = os.path.relpath(file_path, output_folder)
+                                    zipf.write(file_path, arcname)
+                    
+                    # Create download button with descriptive filename
+                    with open(zip_path, "rb") as f:
+                        st.download_button(
+                            label="📦 Download Generated Notes & Resources",
+                            data=f,
+                            file_name=zip_filename,
+                            mime="application/zip",
+                            help="Download all generated files (transcript, summaries, images, PDF)"
+                        )
+                    
+                    # Clean up temporary zip file
+                    if os.path.exists(zip_path):
+                        os.remove(zip_path)
+                        
+                except Exception as e:
+                    st.error(f"Error creating zip file: {str(e)}")
+                    
+            except Exception as e:
+                st.error(f"❌ Error during processing: {str(e)}")
+                status_text.text("Processing failed!")
+                progress.progress(0)
 
 if __name__ == "__main__":
-    create_streamlit_app() 
+    create_streamlit_app()
  
