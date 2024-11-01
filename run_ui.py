@@ -158,7 +158,7 @@ def create_streamlit_app():
     with phase2:
         st.header("Phase 2: Generate Notes")
         
-        # Check if Phase 1 is completed (but don't require frames)
+        # Check if Phase 1 is completed
         if not uploaded_video:
             st.error("⚠️ Please complete Phase 1 first! Upload a video.")
             return
@@ -180,45 +180,29 @@ def create_streamlit_app():
         
         if uploaded_transcript:
             st.success(f"✅ Using uploaded transcript: {uploaded_transcript.name}")
-        
-        # Processing Steps
-        st.subheader("2️⃣ Configure Processing")
-        
-        # Create columns for options and progress
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            should_generate_transcript = not bool(uploaded_transcript) and st.checkbox("Generate Transcript", value=True)
-            should_summarize = st.checkbox("Summarize Transcript", value=True)
-            # Only show image summaries option if we have frames
-            should_generate_summaries = has_frames and st.checkbox("Generate Image Summaries", value=True)
-            should_create_pdf = st.checkbox("Create PDF Report", value=True)
 
         # Prompt Configuration
-        st.subheader("3️⃣ Configure Prompts")
-        if should_summarize or should_generate_summaries:
-            with st.expander("📝 Prompts Configuration", expanded=False):
-                if should_summarize:
-                    transcript_prompt = st.text_area(
-                        "Transcript Summary Prompt",
-                        value=TRANSCRIPT_SUMMARY_PROMPT,
-                        key="transcript_summary_prompt"
-                    )
-                if should_generate_summaries and has_frames:
-                    image_prompt = st.text_area(
-                        "Image Summary Prompt",
-                        value=IMAGE_SUMMARY_PROMPT,
-                        key="image_summary_prompt"
-                    )
+        st.subheader("2️⃣ Configure Prompts")
+        with st.expander("📝 Prompts Configuration", expanded=False):
+            transcript_prompt = st.text_area(
+                "Transcript Summary Prompt",
+                value=TRANSCRIPT_SUMMARY_PROMPT,
+                key="transcript_summary_prompt"
+            )
+            if has_frames:
+                image_prompt = st.text_area(
+                    "Image Summary Prompt",
+                    value=IMAGE_SUMMARY_PROMPT,
+                    key="image_summary_prompt"
+                )
 
         # Process Button
         if st.button("▶️ Generate Notes", type="primary"):
+            progress = st.progress(0)
+            status_text = st.empty()
+            results = {}
+            
             try:
-                # Initialize progress tracking
-                progress = st.progress(0)
-                status_text = st.empty()
-                results = {}
-                
                 # Create checklist for tracking
                 checklist_items = {
                     "transcribe": st.empty(),
@@ -236,41 +220,44 @@ def create_streamlit_app():
                     with open(transcript_path, "wb") as f:
                         f.write(uploaded_transcript.getbuffer())
                     checklist_items["transcribe"].markdown("✅ Using uploaded transcript")
-                
-                elif should_generate_transcript:
+                else:
+                    # Always generate new transcript if not uploaded
                     status_text.text("Generating transcript... This may take a few minutes...")
                     progress.progress(10)
                     video_path = os.path.join(output_folder, uploaded_video.name)
                     
                     if not os.path.exists(video_path):
-                        raise Exception("Video file not found. Please upload the video again.")
+                        # Save the video file if it doesn't exist
+                        with open(video_path, "wb") as f:
+                            f.write(uploaded_video.getbuffer())
+                    
+                    # Remove existing transcript if any
+                    if os.path.exists(transcript_path):
+                        os.remove(transcript_path)
                         
+                    # Generate new transcript
                     transcript_path = transcribe_video(
                         video_path=video_path,
                         output_folder=output_folder
                     )
                     
                     if os.path.exists(transcript_path):
-                        checklist_items["transcribe"].markdown("✅ Generated transcript")
+                        checklist_items["transcribe"].markdown("✅ Generated new transcript")
                     else:
                         raise Exception("Transcript generation failed")
-                else:
-                    st.error("No transcript available. Please either upload a transcript or select 'Generate Transcript'")
-                    return
                 
                 # 2. Summarize Transcript
-                if should_summarize:
-                    status_text.text("Summarizing transcript...")
-                    progress.progress(30)
-                    transcript_summary = summarize_transcript(
-                        transcript_path=transcript_path,
-                        prompt=transcript_prompt
-                    )
-                    results['transcript_summary'] = transcript_summary
-                    checklist_items["summarize"].markdown("✅ Summarized transcript")
+                status_text.text("Summarizing transcript...")
+                progress.progress(30)
+                transcript_summary = summarize_transcript(
+                    transcript_path=transcript_path,
+                    prompt=transcript_prompt
+                )
+                results['transcript_summary'] = transcript_summary
+                checklist_items["summarize"].markdown("✅ Summarized transcript")
                 
                 # 3. Generate Image Summaries (only if frames exist)
-                if should_generate_summaries and has_frames:
+                if has_frames:
                     status_text.text("Generating image summaries...")
                     progress.progress(60)
                     image_summaries = get_image_summaries(
@@ -282,14 +269,13 @@ def create_streamlit_app():
                     checklist_items["image_summaries"].markdown("✅ Generated image summaries")
                 
                 # 4. Create PDF
-                if should_create_pdf:
-                    status_text.text("Creating PDF report...")
-                    progress.progress(90)
-                    pdf_path = create_pdf_report(
-                        output_folder=output_folder
-                    )
-                    results['pdf_path'] = pdf_path
-                    checklist_items["create_pdf"].markdown("✅ Created PDF report")
+                status_text.text("Creating PDF report...")
+                progress.progress(90)
+                pdf_path = create_pdf_report(
+                    output_folder=output_folder
+                )
+                results['pdf_path'] = pdf_path
+                checklist_items["create_pdf"].markdown("✅ Created PDF report")
                 
                 # Complete
                 progress.progress(100)
@@ -301,7 +287,6 @@ def create_streamlit_app():
                 
                 # Create and download zip of all artifacts
                 try:
-                    # Create a descriptive filename based on the video name
                     video_name = os.path.splitext(uploaded_video.name)[0]
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     zip_filename = f"{video_name}_notes_{timestamp}.zip"
@@ -315,7 +300,6 @@ def create_streamlit_app():
                                     arcname = os.path.relpath(file_path, output_folder)
                                     zipf.write(file_path, arcname)
                     
-                    # Create download button with descriptive filename
                     with open(zip_path, "rb") as f:
                         st.download_button(
                             label="📦 Download Generated Notes & Resources",
@@ -325,7 +309,6 @@ def create_streamlit_app():
                             help="Download all generated files (transcript, summaries, images, PDF)"
                         )
                     
-                    # Clean up temporary zip file
                     if os.path.exists(zip_path):
                         os.remove(zip_path)
                         
