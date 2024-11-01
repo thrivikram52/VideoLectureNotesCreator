@@ -263,24 +263,32 @@ def remove_duplicate_frames_gpt(folder_path, prompt):
     return unique_images
 
 def summarize_transcript(transcript_path, prompt):
-    print(f"Starting summarize_transcript function for {transcript_path}")
+    """
+    Summarizes the transcript and saves the summary
+    """
+    print("Starting summarize_transcript function")
     try:
-        with open(transcript_path, 'r', encoding='utf-8') as file:
-            full_text = file.read()
-        
-        formatted_prompt = prompt.format(text=full_text)
-
+        with open(transcript_path, 'r', encoding='utf-8') as f:
+            full_text = f.read()
+            
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "user", "content": formatted_prompt}
+                {"role": "user", "content": prompt + "\n\n" + full_text}
             ],
-            max_tokens=1000
+            max_tokens=500
         )
         
-        print("Successfully generated transcript summary")
+        summary = response.choices[0].message.content
+        
+        # Save summary to file
+        output_folder = os.path.dirname(transcript_path)
+        summary_path = os.path.join(output_folder, "transcript_summary.txt")
+        with open(summary_path, "w", encoding="utf-8") as f:
+            f.write(summary)
+            
         print("Finished summarize_transcript function")
-        return response.choices[0].message.content
+        return summary
     except Exception as e:
         print(f"Error summarizing transcript: {str(e)}", file=sys.stderr)
         print(f"File content (first 100 characters): {full_text[:100]}", file=sys.stderr)
@@ -288,6 +296,9 @@ def summarize_transcript(transcript_path, prompt):
         return None
 
 def get_image_summaries(output_folder, transcript_summary, prompt):
+    """
+    Generates and saves summaries for each image in the output folder
+    """
     print("Starting get_image_summaries function")
     
     image_files = [f for f in os.listdir(output_folder) if f.endswith('.png')]
@@ -300,6 +311,7 @@ def get_image_summaries(output_folder, transcript_summary, prompt):
     print(f"Found {len(image_files)} images to process")
     
     image_summaries = []
+    
     for image_file in image_files:
         print(f"Generating summary for image: {image_file}")
         image_path = os.path.join(output_folder, image_file)
@@ -314,11 +326,40 @@ def get_image_summaries(output_folder, transcript_summary, prompt):
                 max_tokens=200
             )
             
-            image_summaries.append((image_file, response.choices[0].message.content))
-            print(f"Generated summary for image: {image_file}")
+            summary = response.choices[0].message.content
+            image_summaries.append((image_file, summary))
+            
+            # Save individual summary file directly in output folder
+            # Convert scene_1.png to scene_1_summary.txt
+            summary_filename = image_file.replace('.png', '_summary.txt')
+            summary_path = os.path.join(output_folder, summary_filename)
+            
+            with open(summary_path, "w", encoding="utf-8") as f:
+                f.write(f"Image: {image_file}\n")
+                f.write(f"Scene Number: {extract_scene_number(image_file)}\n")
+                f.write("-" * 50 + "\n")
+                f.write("Summary:\n")
+                f.write(summary)
+            
+            print(f"Saved summary for {image_file} to {summary_path}")
+            
         except Exception as e:
             print(f"Error generating summary for {image_file}: {str(e)}")
+            # Save error information in output folder
+            error_filename = image_file.replace('.png', '_error.txt')
+            error_path = os.path.join(output_folder, error_filename)
+            with open(error_path, "w", encoding="utf-8") as f:
+                f.write(f"Error processing {image_file}: {str(e)}")
             continue
+
+    # Create an index file in output folder
+    index_path = os.path.join(output_folder, "summaries_index.txt")
+    with open(index_path, "w", encoding="utf-8") as f:
+        f.write("Image Summaries Index\n")
+        f.write("=" * 20 + "\n\n")
+        for image_file, _ in image_summaries:
+            summary_filename = image_file.replace('.png', '_summary.txt')
+            f.write(f"- {image_file} -> {summary_filename}\n")
 
     print(f"Generated summaries for {len(image_summaries)} images")
     print("Finished get_image_summaries function")
@@ -383,6 +424,9 @@ def markdown_to_pdf_elements(markdown_text, styles):
     return elements
 
 def create_pdf_report(image_summaries, transcript_summary, output_folder, output_pdf=None):
+    """
+    Creates PDF report with images and summaries
+    """
     if output_pdf is None:
         output_pdf = os.path.join(output_folder, "notes.pdf")
     
@@ -392,28 +436,43 @@ def create_pdf_report(image_summaries, transcript_summary, output_folder, output
     styles.add(ParagraphStyle(name='Justify', alignment=TA_JUSTIFY))
     story = []
 
-    print("Adding image summaries to PDF")
-    for image_file, image_summary in image_summaries:
-        print(f"Adding summary for image: {image_file}")
-        try:
-            img_path = os.path.join(output_folder, image_file)
-            if os.path.exists(img_path):
-                img = RLImage(img_path, width=6*inch, height=4*inch)
-                story.append(img)
-            else:
-                print(f"Warning: Image file not found: {img_path}")
-                story.append(Paragraph(f"[Image {image_file} not found]", styles['BodyText']))
-        except Exception as e:
-            print(f"Error adding image {image_file}: {str(e)}")
-            story.append(Paragraph(f"[Image {image_file} could not be loaded]", styles['BodyText']))
-        story.append(Spacer(1, 0.2*inch))
-        story.extend(markdown_to_pdf_elements(image_summary, styles))
+    # Add title
+    story.append(Paragraph("Lecture Notes", styles['Title']))
+    story.append(Spacer(1, 0.5*inch))
+
+    # Add transcript summary section
+    if transcript_summary:
+        story.append(Paragraph("Transcript Summary", styles['Heading1']))
+        story.extend(markdown_to_pdf_elements(transcript_summary, styles))
         story.append(Spacer(1, 0.5*inch))
 
-    print("Adding overall transcript summary to PDF")
-    story.append(Paragraph("Summary", styles['Heading1']))
-    story.extend(markdown_to_pdf_elements(transcript_summary, styles))
-    story.append(Spacer(1, 0.5*inch))
+    # Add image summaries section
+    if image_summaries:
+        story.append(Paragraph("Scene Summaries", styles['Heading1']))
+        story.append(Spacer(1, 0.3*inch))
+
+        print("Adding image summaries to PDF")
+        for image_file, image_summary in image_summaries:
+            # Add scene number as subheading
+            scene_num = extract_scene_number(image_file)
+            story.append(Paragraph(f"Scene {scene_num}", styles['Heading2']))
+            
+            print(f"Adding summary for image: {image_file}")
+            try:
+                img_path = os.path.join(output_folder, image_file)
+                if os.path.exists(img_path):
+                    img = RLImage(img_path, width=6*inch, height=4*inch)
+                    story.append(img)
+                else:
+                    print(f"Warning: Image file not found: {img_path}")
+                    story.append(Paragraph(f"[Image {image_file} not found]", styles['BodyText']))
+            except Exception as e:
+                print(f"Error adding image {image_file}: {str(e)}")
+                story.append(Paragraph(f"[Image {image_file} could not be loaded]", styles['BodyText']))
+            
+            story.append(Spacer(1, 0.2*inch))
+            story.extend(markdown_to_pdf_elements(image_summary, styles))
+            story.append(Spacer(1, 0.5*inch))
 
     try:
         doc.build(story)

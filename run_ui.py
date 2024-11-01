@@ -13,6 +13,7 @@ from VideoLectureNotesCreator import (
 from config import *
 import tkinter as tk
 from tkinter import filedialog
+import zipfile
 
 def select_folder():
     root = tk.Tk()
@@ -106,6 +107,14 @@ def create_streamlit_app():
         st.warning("⚠️ All stages selected: Output folder will be cleaned for a fresh start")
     elif initial_stages_enabled:
         st.warning("⚠️ Initial stages selected: Output folder will be cleaned")
+
+    # Add warning about video requirement
+    if initial_stages_enabled:
+        if not uploaded_video:
+            st.warning("⚠️ Video upload is mandatory when Transcribe or Extract Frames is selected!")
+    else:
+        if not uploaded_video:
+            st.info("ℹ️ Video upload is optional for the selected stages")
 
     # Create two columns for parameters and prompts
     st.markdown("---")  # Add a separator line
@@ -201,16 +210,17 @@ def create_streamlit_app():
         process_button = st.button("▶️ Process", type="primary", use_container_width=True)
 
     if process_button:
-        if not uploaded_video:
-            st.error("Please upload a video file first!")
+        # Check if video is required and not provided
+        if initial_stages_enabled and not uploaded_video:
+            st.error("Please upload a video file first! Video is required for Transcribe or Extract Frames stages.")
             return
             
         # Create output folder
         output_folder = "output"
         os.makedirs(output_folder, exist_ok=True)
         
-        # Save uploaded video to output folder if extracting frames
-        if stages["extract_frames"]:
+        # Save uploaded video to output folder if needed
+        if initial_stages_enabled:
             video_path = os.path.join(output_folder, uploaded_video.name)
             with open(video_path, "wb") as f:
                 f.write(uploaded_video.getbuffer())
@@ -329,6 +339,10 @@ def create_streamlit_app():
                     transcript_path=transcript_path,
                     prompt=st.session_state.transcript_summary_prompt
                 )
+                # Save transcript summary
+                summary_path = os.path.join(output_folder, "transcript_summary.txt")
+                with open(summary_path, "w", encoding="utf-8") as f:
+                    f.write(transcript_summary)
                 results['has_transcript_summary'] = bool(transcript_summary)
                 checklist_items["summarize_transcript"].markdown("✅ Summarize Transcript")
             else:
@@ -344,6 +358,13 @@ def create_streamlit_app():
                     transcript_summary=transcript_summary,
                     prompt=st.session_state.image_summary_prompt
                 )
+                # Save image summaries
+                summaries_path = os.path.join(output_folder, "image_summaries.txt")
+                with open(summaries_path, "w", encoding="utf-8") as f:
+                    for image_file, summary in image_summaries:
+                        f.write(f"Image: {image_file}\n")
+                        f.write(f"Summary: {summary}\n")
+                        f.write("-" * 50 + "\n")
                 results['num_image_summaries'] = len(image_summaries)
                 checklist_items["generate_image_summary"].markdown(f"✅ Generate Summaries ({len(image_summaries)} images)")
             else:
@@ -392,21 +413,36 @@ def create_streamlit_app():
             # Provide download links
             st.write("### Download Files")
             col1, col2 = st.columns(2)
+            
             with col1:
-                with open(transcript_path, "rb") as file:
+                # Create zip file of complete output
+                zip_path = os.path.join(output_folder, "complete_output.zip")
+                with zipfile.ZipFile(zip_path, 'w') as zipf:
+                    for root, dirs, files in os.walk(output_folder):
+                        for file in files:
+                            # Skip the zip file itself and the uploaded video file
+                            if file != "complete_output.zip" and not file.endswith(('.mp4', '.avi', '.mov')):
+                                file_path = os.path.join(root, file)
+                                arcname = os.path.relpath(file_path, output_folder)
+                                zipf.write(file_path, arcname)
+                
+                with open(zip_path, "rb") as f:
                     st.download_button(
-                        label="Download Transcript",
-                        data=file,
-                        file_name="transcription.txt",
-                        mime="text/plain"
+                        label="📦 Download Complete Output",
+                        data=f,
+                        file_name="complete_output.zip",
+                        mime="application/zip",
+                        help="Download all files (transcripts, summaries, images, PDF) except the original video"
                     )
+            
             with col2:
-                with open(pdf_path, "rb") as file:
+                with open(pdf_path, "rb") as f:
                     st.download_button(
-                        label="Download PDF Report",
-                        data=file,
+                        label="📄 Download PDF Notes Only",
+                        data=f,
                         file_name="notes.pdf",
-                        mime="application/pdf"
+                        mime="application/pdf",
+                        help="Download only the final PDF report"
                     )
                     
         except Exception as e:
