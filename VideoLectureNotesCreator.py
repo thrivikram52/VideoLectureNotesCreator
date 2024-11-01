@@ -423,12 +423,14 @@ def markdown_to_pdf_elements(markdown_text, styles):
     
     return elements
 
-def create_pdf_report(output_folder, output_pdf=None):
+def create_pdf_report(output_folder: str, output_filename: str = None) -> str:
     """
-    Creates PDF report by reading files from the output folder
+    Create PDF report from transcript and images
     """
-    if output_pdf is None:
-        output_pdf = os.path.join(output_folder, "notes.pdf")
+    if output_filename is None:
+        output_filename = "notes.pdf"
+        
+    output_pdf = os.path.join(output_folder, output_filename)
     
     print(f"Starting create_pdf_report function, output: {output_pdf}")
     doc = SimpleDocTemplate(output_pdf, pagesize=letter)

@@ -271,8 +271,16 @@ def create_streamlit_app():
                 # 4. Create PDF
                 status_text.text("Creating PDF report...")
                 progress.progress(90)
+                
+                # Create PDF filename based on video name
+                video_name = os.path.splitext(uploaded_video.name)[0]
+                pdf_filename = f"{video_name}_notes.pdf"
+                pdf_path = os.path.join(output_folder, pdf_filename)
+                
+                # Create PDF
                 pdf_path = create_pdf_report(
-                    output_folder=output_folder
+                    output_folder=output_folder,
+                    output_filename=pdf_filename  # Pass the custom filename
                 )
                 results['pdf_path'] = pdf_path
                 checklist_items["create_pdf"].markdown("✅ Created PDF report")
