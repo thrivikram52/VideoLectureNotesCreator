@@ -423,9 +423,9 @@ def markdown_to_pdf_elements(markdown_text, styles):
     
     return elements
 
-def create_pdf_report(image_summaries, transcript_summary, output_folder, output_pdf=None):
+def create_pdf_report(output_folder, output_pdf=None):
     """
-    Creates PDF report with images and summaries
+    Creates PDF report by reading files from the output folder
     """
     if output_pdf is None:
         output_pdf = os.path.join(output_folder, "notes.pdf")
@@ -440,52 +440,78 @@ def create_pdf_report(image_summaries, transcript_summary, output_folder, output
     story.append(Paragraph("Lecture Notes", styles['Title']))
     story.append(Spacer(1, 0.5*inch))
 
-    # Add transcript summary section
-    if transcript_summary:
-        story.append(Paragraph("Transcript Summary", styles['Heading1']))
-        story.extend(markdown_to_pdf_elements(transcript_summary, styles))
-        story.append(Spacer(1, 0.5*inch))
+    # Get all image files and their summaries first
+    image_files = [f for f in os.listdir(output_folder) if f.endswith('.png')]
+    image_files.sort(key=extract_scene_number)
 
-    # Add image summaries section
-    if image_summaries:
-        story.append(Paragraph("Scene Summaries", styles['Heading1']))
+    if image_files:
+        story.append(Paragraph("Summary", styles['Heading1']))
         story.append(Spacer(1, 0.3*inch))
 
         print("Adding image summaries to PDF")
-        for image_file, image_summary in image_summaries:
-            # Add scene number as subheading
-            scene_num = extract_scene_number(image_file)
-            story.append(Paragraph(f"Scene {scene_num}", styles['Heading2']))
+        for image_file in image_files:
+            # Get corresponding summary file
+            summary_file = image_file.replace('.png', '_summary.txt')
+            summary_path = os.path.join(output_folder, summary_file)
             
-            print(f"Adding summary for image: {image_file}")
+            if not os.path.exists(summary_path):
+                print(f"Warning: Summary not found for {image_file}")
+                continue
+            
+            # Add image
             try:
                 img_path = os.path.join(output_folder, image_file)
-                if os.path.exists(img_path):
-                    img = RLImage(img_path, width=6*inch, height=4*inch)
-                    story.append(img)
-                else:
-                    print(f"Warning: Image file not found: {img_path}")
-                    story.append(Paragraph(f"[Image {image_file} not found]", styles['BodyText']))
+                img = RLImage(img_path, width=6*inch, height=4*inch)
+                story.append(img)
             except Exception as e:
                 print(f"Error adding image {image_file}: {str(e)}")
                 story.append(Paragraph(f"[Image {image_file} could not be loaded]", styles['BodyText']))
             
-            story.append(Spacer(1, 0.2*inch))
-            story.extend(markdown_to_pdf_elements(image_summary, styles))
-            story.append(Spacer(1, 0.5*inch))
+            # Add summary
+            try:
+                with open(summary_path, 'r', encoding='utf-8') as f:
+                    # Skip the header lines and get only the summary
+                    lines = f.readlines()
+                    summary = ''.join(lines[4:])  # Skip first 4 lines (Image:, Scene Number:, ---, Summary:)
+                story.append(Spacer(1, 0.2*inch))
+                story.extend(markdown_to_pdf_elements(summary, styles))
+                story.append(Spacer(1, 0.5*inch))
+            except Exception as e:
+                print(f"Error adding summary for {image_file}: {str(e)}")
+
+    # Add transcript summary section at the end if exists
+    transcript_summary_path = os.path.join(output_folder, "transcript_summary.txt")
+    if os.path.exists(transcript_summary_path):
+        story.append(Paragraph("Transcript Summary", styles['Heading1']))
+        with open(transcript_summary_path, 'r', encoding='utf-8') as f:
+            transcript_summary = f.read()
+        story.extend(markdown_to_pdf_elements(transcript_summary, styles))
+        story.append(Spacer(1, 0.5*inch))
 
     try:
         doc.build(story)
         print(f"PDF report created: {output_pdf}")
     except Exception as e:
         print(f"Error building PDF: {str(e)}")
-        # Attempt to save what we can
         try:
-            doc.build(story[:len(story)//2])  # Try to build with half the content
+            doc.build(story[:len(story)//2])
             print(f"Partial PDF report created: {output_pdf}")
         except:
             print("Failed to create even a partial PDF report")
 
     print("Finished create_pdf_report function")
     return output_pdf
+
+def get_output_folder(video_filename):
+    """
+    Creates and returns output folder path based on video filename
+    Example: 'lecture1.mp4' -> 'lecture1'
+    """
+    # Remove file extension and any special characters
+    base_name = os.path.splitext(video_filename)[0]
+    # Create a valid folder name (remove special characters)
+    safe_name = "".join(c for c in base_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+    # Create directory if it doesn't exist
+    os.makedirs(safe_name, exist_ok=True)
+    return safe_name
 

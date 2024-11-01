@@ -8,12 +8,14 @@ from VideoLectureNotesCreator import (
     summarize_transcript,
     get_image_summaries,
     create_pdf_report,
-    clean_output_folder
+    clean_output_folder,
+    get_output_folder
 )
 from config import *
 import tkinter as tk
 from tkinter import filedialog
 import zipfile
+from datetime import datetime
 
 def select_folder():
     root = tk.Tk()
@@ -41,7 +43,7 @@ def create_streamlit_app():
             # Video File Selection
             st.subheader("1️⃣ Upload Video")
             uploaded_video = st.file_uploader(
-                "Select your video file (MP4, AVI, or MOV)", 
+                "Select your video file (MP4, AVI, or MOV) *", 
                 type=['mp4', 'avi', 'mov']
             )
             
@@ -55,7 +57,7 @@ def create_streamlit_app():
                 - Type: {uploaded_video.type}
                 """)
             else:
-                st.warning("⚠️ Please upload a video file to begin")
+                st.warning("⚠️ Please upload a video file to begin - This is required!")
 
         with col2:
             # Optional Transcript Upload
@@ -77,8 +79,7 @@ def create_streamlit_app():
     # Add information about folder cleanup behavior
     st.info("""
     📂 **Output Folder Behavior:**
-    - If **all stages** are selected: The output folder will be cleaned for a fresh start
-    - If **Transcribe** or **Extract Frames** is selected: The output folder will be cleaned
+    - If **all stages** are selected: A fresh folder will be created
     - Otherwise: Existing files will be preserved and reused
     """)
     
@@ -95,26 +96,8 @@ def create_streamlit_app():
         stages.update({
             "summarize_transcript": st.checkbox("Summarize Transcript", value=True),
             "generate_summaries": st.checkbox("Generate Image Summaries", value=True),
-            "create_pdf": st.checkbox("Create PDF Report", value=True),
-            "cleanup": st.checkbox("Cleanup", value=True),
+            "create_pdf": st.checkbox("Create PDF Report", value=True)
         })
-
-    # Add dynamic warning based on selection
-    all_stages_enabled = all(stages.values())
-    initial_stages_enabled = stages["transcribe"] or stages["extract_frames"]
-    
-    if all_stages_enabled:
-        st.warning("⚠️ All stages selected: Output folder will be cleaned for a fresh start")
-    elif initial_stages_enabled:
-        st.warning("⚠️ Initial stages selected: Output folder will be cleaned")
-
-    # Add warning about video requirement
-    if initial_stages_enabled:
-        if not uploaded_video:
-            st.warning("⚠️ Video upload is mandatory when Transcribe or Extract Frames is selected!")
-    else:
-        if not uploaded_video:
-            st.info("ℹ️ Video upload is optional for the selected stages")
 
     # Create two columns for parameters and prompts
     st.markdown("---")  # Add a separator line
@@ -142,12 +125,6 @@ def create_streamlit_app():
         except ValueError as e:
             st.error("Invalid value in config for SSIM_THRESHOLD or FRAME_SKIP. Please check your config file.")
             return
-
-        cleanup = st.checkbox(
-            "Enable Cleanup", 
-            value=bool(CLEANUP_ENABLED),  # Convert to boolean
-            help="Remove temporary files after processing"
-        )
 
     with col2:
         st.subheader("5️⃣ Prompts Configuration")
@@ -203,23 +180,40 @@ def create_streamlit_app():
     # Add a separator before the process button
     st.markdown("---")
     
-    # Center the process button and add output folder info
+    # Center the process button
     col1, col2, col3 = st.columns([3, 2, 3])
     with col2:
-        st.info("Files will be saved in the 'output' folder")
         process_button = st.button("▶️ Process", type="primary", use_container_width=True)
 
     if process_button:
-        # Check if video is required and not provided
-        if initial_stages_enabled and not uploaded_video:
-            st.error("Please upload a video file first! Video is required for Transcribe or Extract Frames stages.")
+        if not uploaded_video:
+            st.error("Please upload a video file first! This is required.")
             return
             
-        # Create output folder
-        output_folder = "output"
-        os.makedirs(output_folder, exist_ok=True)
+        # Get folder name from video
+        folder_name = get_output_folder(uploaded_video.name)
         
-        # Save uploaded video to output folder if needed
+        # Check if all stages are selected
+        all_stages_enabled = all(stages.values())
+        initial_stages_enabled = stages["transcribe"] or stages["extract_frames"]
+        
+        if all_stages_enabled:
+            # Create new folder and clean it
+            if os.path.exists(folder_name):
+                st.info(f"📂 Creating fresh folder: {folder_name}")
+                clean_output_folder(folder_name)
+            else:
+                os.makedirs(folder_name)
+            output_folder = folder_name
+        else:
+            # Use existing folder if available
+            if not os.path.exists(folder_name):
+                st.error(f"Folder {folder_name} not found! Please run all stages first.")
+                return
+            output_folder = folder_name
+            st.info(f"📂 Using existing folder: {output_folder}")
+        
+        # Save uploaded video if needed for initial stages
         if initial_stages_enabled:
             video_path = os.path.join(output_folder, uploaded_video.name)
             with open(video_path, "wb") as f:
@@ -243,8 +237,7 @@ def create_streamlit_app():
             checklist_items.update({
                 "summarize_transcript": st.empty(),
                 "generate_image_summary": st.empty(),
-                "create_pdf": st.empty(),
-                "cleanup": st.empty(),
+                "create_pdf": st.empty()
             })
         
         # Initialize checklist
@@ -375,10 +368,10 @@ def create_streamlit_app():
             if stages["create_pdf"]:
                 status_text.text("Creating PDF report...")
                 progress_bar.progress(95)
-                pdf_path = os.path.join(output_folder, "notes.pdf")
+                folder_name = os.path.basename(output_folder)
+                pdf_name = f"{folder_name}_notes.pdf"  # Create consistent PDF name
+                pdf_path = os.path.join(output_folder, pdf_name)
                 create_pdf_report(
-                    image_summaries=image_summaries,
-                    transcript_summary=transcript_summary,
                     output_folder=output_folder,
                     output_pdf=pdf_path
                 )
@@ -387,17 +380,6 @@ def create_streamlit_app():
             else:
                 checklist_items["create_pdf"].markdown("⏭️ Skipped PDF Creation")
             
-            # Cleanup if enabled
-            if stages["cleanup"]:
-                status_text.text("Cleaning up temporary files...")
-                try:
-                    # Cleanup code here
-                    checklist_items["cleanup"].markdown("✅ Cleanup Complete")
-                except Exception as e:
-                    checklist_items["cleanup"].markdown("❌ Cleanup Failed")
-            else:
-                checklist_items["cleanup"].markdown("⏭️ Cleanup Skipped")
-
             # Update final progress
             progress_bar.progress(100)
             status_text.text("Processing completed successfully!")
@@ -415,13 +397,16 @@ def create_streamlit_app():
             col1, col2 = st.columns(2)
             
             with col1:
-                # Create zip file of complete output
-                zip_path = os.path.join(output_folder, "complete_output.zip")
+                # Create zip file with folder name
+                folder_name = os.path.basename(output_folder)
+                zip_name = f"{folder_name}_complete.zip"
+                zip_path = os.path.join(output_folder, zip_name)
+                
                 with zipfile.ZipFile(zip_path, 'w') as zipf:
                     for root, dirs, files in os.walk(output_folder):
                         for file in files:
-                            # Skip the zip file itself and the uploaded video file
-                            if file != "complete_output.zip" and not file.endswith(('.mp4', '.avi', '.mov')):
+                            # Skip the zip file itself and video files
+                            if file != zip_name and not file.endswith(('.mp4', '.avi', '.mov')):
                                 file_path = os.path.join(root, file)
                                 arcname = os.path.relpath(file_path, output_folder)
                                 zipf.write(file_path, arcname)
@@ -430,17 +415,18 @@ def create_streamlit_app():
                     st.download_button(
                         label="📦 Download Complete Output",
                         data=f,
-                        file_name="complete_output.zip",
+                        file_name=zip_name,
                         mime="application/zip",
                         help="Download all files (transcripts, summaries, images, PDF) except the original video"
                     )
             
             with col2:
+                # Use the same PDF path that was created earlier
                 with open(pdf_path, "rb") as f:
                     st.download_button(
                         label="📄 Download PDF Notes Only",
                         data=f,
-                        file_name="notes.pdf",
+                        file_name=pdf_name,
                         mime="application/pdf",
                         help="Download only the final PDF report"
                     )
