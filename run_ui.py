@@ -39,8 +39,8 @@ def create_streamlit_app():
         st.markdown("---")
         st.subheader("1️⃣ Upload Video")
         uploaded_video = st.file_uploader(
-            "Select your video file (MP4, AVI, or MOV) *", 
-            type=['mp4', 'avi', 'mov']
+            "Select your video file (MP4, AVI, MOV or WEBM) *", 
+            type=['mp4', 'avi', 'mov', 'webm']
         )
         
         if uploaded_video:
@@ -293,35 +293,52 @@ def create_streamlit_app():
                 st.markdown("---")
                 st.subheader("📥 Download Results")
                 
-                # Create and download zip of all artifacts
-                try:
-                    video_name = os.path.splitext(uploaded_video.name)[0]
-                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    zip_filename = f"{video_name}_notes_{timestamp}.zip"
-                    zip_path = os.path.join(output_folder, "temp_artifacts.zip")
-                    
-                    with zipfile.ZipFile(zip_path, 'w') as zipf:
-                        for root, dirs, files in os.walk(output_folder):
-                            for file in files:
-                                file_path = os.path.join(root, file)
-                                if not (file.endswith(('.mp4', '.avi', '.mov')) or file == "temp_artifacts.zip"):
-                                    arcname = os.path.relpath(file_path, output_folder)
-                                    zipf.write(file_path, arcname)
-                    
-                    with open(zip_path, "rb") as f:
-                        st.download_button(
-                            label="📦 Download Generated Notes & Resources",
-                            data=f,
-                            file_name=zip_filename,
-                            mime="application/zip",
-                            help="Download all generated files (transcript, summaries, images, PDF)"
-                        )
-                    
-                    if os.path.exists(zip_path):
-                        os.remove(zip_path)
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # Download PDF Notes
+                    if results.get('pdf_path') and os.path.exists(results['pdf_path']):
+                        with open(results['pdf_path'], "rb") as pdf_file:
+                            video_name = os.path.splitext(uploaded_video.name)[0]
+                            pdf_filename = f"{video_name}_notes.pdf"
+                            st.download_button(
+                                label="📄 Download Notes (PDF)",
+                                data=pdf_file,
+                                file_name=pdf_filename,
+                                mime="application/pdf",
+                                help="Download the generated lecture notes in PDF format"
+                            )
+                
+                with col2:
+                    # Create and download zip of all artifacts
+                    try:
+                        video_name = os.path.splitext(uploaded_video.name)[0]
+                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        zip_filename = f"{video_name}_notes_{timestamp}.zip"
+                        zip_path = os.path.join(output_folder, "temp_artifacts.zip")
                         
-                except Exception as e:
-                    st.error(f"Error creating zip file: {str(e)}")
+                        with zipfile.ZipFile(zip_path, 'w') as zipf:
+                            for root, dirs, files in os.walk(output_folder):
+                                for file in files:
+                                    file_path = os.path.join(root, file)
+                                    if not (file.endswith(('.mp4', '.avi', '.mov')) or file == "temp_artifacts.zip"):
+                                        arcname = os.path.relpath(file_path, output_folder)
+                                        zipf.write(file_path, arcname)
+                        
+                        with open(zip_path, "rb") as f:
+                            st.download_button(
+                                label="📦 Download All Resources",
+                                data=f,
+                                file_name=zip_filename,
+                                mime="application/zip",
+                                help="Download all generated files (transcript, summaries, images, PDF)"
+                            )
+                        
+                        if os.path.exists(zip_path):
+                            os.remove(zip_path)
+                            
+                    except Exception as e:
+                        st.error(f"Error creating zip file: {str(e)}")
                     
             except Exception as e:
                 st.error(f"❌ Error during processing: {str(e)}")
