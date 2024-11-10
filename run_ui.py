@@ -1,22 +1,31 @@
 import streamlit as st
 import os
-from VideoLectureNotesCreator import (
-    transcribe_video,
-    extract_frames,
-    remove_unmeaningful_frames,
-    remove_duplicate_frames_gpt,
-    summarize_transcript,
-    get_image_summaries,
-    create_pdf_report,
-    clean_output_folder,
-    get_output_folder,
-    extract_scene_number
-)
-from config import *
 import tkinter as tk
 from tkinter import filedialog
 import zipfile
 from datetime import datetime
+import asyncio
+
+# Core functionality imports
+from VideoTranscriber import transcribe_video
+from VideoFrameExtractor import extract_frames
+from VideoLectureNotesCreatorAgent import LectureNotesCreator
+from Utils import (
+    get_output_folder,
+    extract_scene_number
+)
+from constants import (
+    SSIM_THRESHOLD,
+    FRAME_SKIP,
+    TEACHER_INSTRUCTIONS,
+    INITIAL_NOTES_PROMPT,
+    MISSING_CONTENT_PROMPT,
+    COMBINE_NOTES_PROMPT,
+    QA_PROMPT,
+    STUDENT_INSTRUCTIONS,
+    REVIEW_NOTES_PROMPT
+)
+from PDFCreator import PDFCreator
 
 def select_folder():
     root = tk.Tk()
@@ -96,7 +105,7 @@ def create_streamlit_app():
                     "SSIM Threshold", 
                     min_value=0.0, 
                     max_value=1.0, 
-                    value=float(SSIM_THRESHOLD),
+                    value=SSIM_THRESHOLD,
                     help="Lower values will extract more frames. Recommended: 0.5-0.8"
                 )
             
@@ -105,7 +114,7 @@ def create_streamlit_app():
                     "Frame Skip Rate",
                     min_value=1,
                     max_value=300,
-                    value=int(FRAME_SKIP),
+                    value=FRAME_SKIP,
                     help="Process every Nth frame. Higher values = fewer frames"
                 )
 
@@ -220,30 +229,70 @@ def create_streamlit_app():
         # Prompt Configuration
         st.subheader("2️⃣ Configure Prompts")
         with st.expander("📝 Prompts Configuration", expanded=False):
-            transcript_prompt = st.text_area(
-                "Transcript Summary Prompt",
-                value=TRANSCRIPT_SUMMARY_PROMPT,
-                key="transcript_summary_prompt"
-            )
-            if has_frames:
-                image_prompt = st.text_area(
-                    "Image Summary Prompt",
-                    value=IMAGE_SUMMARY_PROMPT,
-                    key="image_summary_prompt"
+            # Teacher Prompts Section
+            st.markdown("### 👨‍🏫 Teacher Prompts")
+            
+            teacher_prompts = {
+                "Instructions": st.text_area(
+                    "Teacher Instructions",
+                    value=TEACHER_INSTRUCTIONS,
+                    key="teacher_instructions",
+                    help="Base instructions for the teacher role"
+                ),
+                "Initial Notes": st.text_area(
+                    "Initial Notes Creation",
+                    value=INITIAL_NOTES_PROMPT,
+                    key="initial_notes_prompt",
+                    help="Prompt for creating the first draft of notes"
+                ),
+                "Missing Content": st.text_area(
+                    "Missing Content Analysis",
+                    value=MISSING_CONTENT_PROMPT,
+                    key="missing_content_prompt",
+                    help="Prompt for identifying missing content"
+                ),
+                "Combine Notes": st.text_area(
+                    "Notes Combination",
+                    value=COMBINE_NOTES_PROMPT,
+                    key="combine_notes_prompt",
+                    help="Prompt for combining and refining notes"
+                ),
+                "Q&A": st.text_area(
+                    "Question Answering",
+                    value=QA_PROMPT,
+                    key="qa_prompt",
+                    help="Prompt for answering student questions"
                 )
+            }
+
+            # Student Prompts Section
+            st.markdown("### 👨‍🎓 Student Prompts")
+            
+            student_prompts = {
+                "Instructions": st.text_area(
+                    "Student Instructions",
+                    value=STUDENT_INSTRUCTIONS,
+                    key="student_instructions",
+                    help="Base instructions for the student role"
+                ),
+                "Review Notes": st.text_area(
+                    "Notes Review",
+                    value=REVIEW_NOTES_PROMPT,
+                    key="review_notes_prompt",
+                    help="Prompt for reviewing and questioning notes"
+                )
+            }
 
         # Process Button
         if st.button("▶️ Generate Notes", type="primary"):
             progress = st.progress(0)
             status_text = st.empty()
-            results = {}
             
             try:
                 # Create checklist for tracking
                 checklist_items = {
                     "transcribe": st.empty(),
-                    "summarize": st.empty(),
-                    "image_summaries": st.empty(),
+                    "process": st.empty(),
                     "create_pdf": st.empty()
                 }
                 
@@ -257,68 +306,45 @@ def create_streamlit_app():
                         f.write(uploaded_transcript.getbuffer())
                     checklist_items["transcribe"].markdown("✅ Using uploaded transcript")
                 else:
-                    # Always generate new transcript if not uploaded
                     status_text.text("Generating transcript... This may take a few minutes...")
                     progress.progress(10)
                     video_path = os.path.join(output_folder, uploaded_video.name)
                     
                     if not os.path.exists(video_path):
-                        # Save the video file if it doesn't exist
                         with open(video_path, "wb") as f:
                             f.write(uploaded_video.getbuffer())
                     
-                    # Remove existing transcript if any
-                    if os.path.exists(transcript_path):
-                        os.remove(transcript_path)
-                        
-                    # Generate new transcript
                     transcript_path = transcribe_video(
                         video_path=video_path,
                         output_folder=output_folder
                     )
-                    
-                    if os.path.exists(transcript_path):
-                        checklist_items["transcribe"].markdown("✅ Generated new transcript")
-                    else:
-                        raise Exception("Transcript generation failed")
+                    checklist_items["transcribe"].markdown("✅ Generated transcript")
+
+                # 2. Process with LectureNotesCreator
+                status_text.text("Processing transcript and generating notes...")
+                progress.progress(50)
                 
-                # 2. Summarize Transcript
-                status_text.text("Summarizing transcript...")
-                progress.progress(30)
-                transcript_summary = summarize_transcript(
-                    transcript_path=transcript_path,
-                    prompt=transcript_prompt
-                )
-                results['transcript_summary'] = transcript_summary
-                checklist_items["summarize"].markdown("✅ Summarized transcript")
+                # Initialize LectureNotesCreator with API key and create notes
+                notes_creator = LectureNotesCreator(api_key)
                 
-                # 3. Generate Image Summaries (only if frames exist)
-                if has_frames:
-                    status_text.text("Generating image summaries...")
-                    progress.progress(60)
-                    image_summaries = get_image_summaries(
-                        output_folder=output_folder,
-                        transcript_summary=results.get('transcript_summary', ''),
-                        prompt=image_prompt
+                # Create and run the async task
+                async def process_notes():
+                    await notes_creator.create_notes(
+                        transcript_path=transcript_path,
+                        output_folder=output_folder
                     )
-                    results['image_summaries'] = image_summaries
-                    checklist_items["image_summaries"].markdown("✅ Generated image summaries")
                 
-                # 4. Create PDF
+                # Run the async function
+                asyncio.run(process_notes())
+                
+                checklist_items["process"].markdown("✅ Generated notes")
+                
+                # 3. Create PDF Report
                 status_text.text("Creating PDF report...")
-                progress.progress(90)
+                progress.progress(75)
                 
-                # Create PDF filename based on video name
-                video_name = os.path.splitext(uploaded_video.name)[0]
-                pdf_filename = f"{video_name}_notes.pdf"
-                pdf_path = os.path.join(output_folder, pdf_filename)
-                
-                # Create PDF
-                pdf_path = create_pdf_report(
-                    output_folder=output_folder,
-                    output_filename=pdf_filename  # Pass the custom filename
-                )
-                results['pdf_path'] = pdf_path
+                pdf_creator = PDFCreator()
+                pdf_path = pdf_creator.create_pdf_report(output_folder)
                 checklist_items["create_pdf"].markdown("✅ Created PDF report")
                 
                 # Complete
@@ -329,53 +355,15 @@ def create_streamlit_app():
                 st.markdown("---")
                 st.subheader("📥 Download Results")
                 
-                col1, col2 = st.columns(2)
+                if os.path.exists(pdf_path):
+                    with open(pdf_path, "rb") as pdf_file:
+                        st.download_button(
+                            label="📄 Download Notes (PDF)",
+                            data=pdf_file,
+                            file_name=f"lecture_notes.pdf",
+                            mime="application/pdf"
+                        )
                 
-                with col1:
-                    # Download PDF Notes
-                    if results.get('pdf_path') and os.path.exists(results['pdf_path']):
-                        with open(results['pdf_path'], "rb") as pdf_file:
-                            video_name = os.path.splitext(uploaded_video.name)[0]
-                            pdf_filename = f"{video_name}_notes.pdf"
-                            st.download_button(
-                                label="📄 Download Notes (PDF)",
-                                data=pdf_file,
-                                file_name=pdf_filename,
-                                mime="application/pdf",
-                                help="Download the generated lecture notes in PDF format"
-                            )
-                
-                with col2:
-                    # Create and download zip of all artifacts
-                    try:
-                        video_name = os.path.splitext(uploaded_video.name)[0]
-                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        zip_filename = f"{video_name}_notes_{timestamp}.zip"
-                        zip_path = os.path.join(output_folder, "temp_artifacts.zip")
-                        
-                        with zipfile.ZipFile(zip_path, 'w') as zipf:
-                            for root, dirs, files in os.walk(output_folder):
-                                for file in files:
-                                    file_path = os.path.join(root, file)
-                                    if not (file.endswith(('.mp4', '.avi', '.mov')) or file == "temp_artifacts.zip"):
-                                        arcname = os.path.relpath(file_path, output_folder)
-                                        zipf.write(file_path, arcname)
-                        
-                        with open(zip_path, "rb") as f:
-                            st.download_button(
-                                label="📦 Download All Resources",
-                                data=f,
-                                file_name=zip_filename,
-                                mime="application/zip",
-                                help="Download all generated files (transcript, summaries, images, PDF)"
-                            )
-                        
-                        if os.path.exists(zip_path):
-                            os.remove(zip_path)
-                            
-                    except Exception as e:
-                        st.error(f"Error creating zip file: {str(e)}")
-                    
             except Exception as e:
                 st.error(f"❌ Error during processing: {str(e)}")
                 status_text.text("Processing failed!")

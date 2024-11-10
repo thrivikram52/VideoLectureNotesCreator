@@ -20,3 +20,7 @@ reportlab  # For PDF creation
 
 # UI
 streamlit  # For web interface
+python-dotenv
+Pillow
+asyncio
+mdpdf
