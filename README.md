@@ -109,3 +109,6 @@ The application creates an `output` folder containing:
 - Internet connection required for AI processing
 - Ensure sufficient disk space for temporary files
 - API keys should be configured in environment variables
+
+
+Need to install brew install pandoc

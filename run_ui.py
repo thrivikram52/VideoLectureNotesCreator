@@ -25,7 +25,7 @@ from constants import (
     STUDENT_INSTRUCTIONS,
     REVIEW_NOTES_PROMPT
 )
-from PDFCreator import PDFCreator
+from DocumentCreator import DocumentCreator
 
 def select_folder():
     root = tk.Tk()
@@ -343,8 +343,8 @@ def create_streamlit_app():
                 status_text.text("Creating PDF report...")
                 progress.progress(75)
                 
-                pdf_creator = PDFCreator()
-                pdf_path = pdf_creator.create_pdf_report(output_folder)
+                pdf_creator = DocumentCreator()
+                doc_path = pdf_creator.create_document(output_folder)
                 checklist_items["create_pdf"].markdown("✅ Created PDF report")
                 
                 # Complete
@@ -355,13 +355,13 @@ def create_streamlit_app():
                 st.markdown("---")
                 st.subheader("📥 Download Results")
                 
-                if os.path.exists(pdf_path):
-                    with open(pdf_path, "rb") as pdf_file:
+                if os.path.exists(doc_path):
+                    with open(doc_path, "rb") as doc_file:
                         st.download_button(
-                            label="📄 Download Notes (PDF)",
-                            data=pdf_file,
-                            file_name=f"lecture_notes.pdf",
-                            mime="application/pdf"
+                            label="📄 Download Notes (Word)",
+                            data=doc_file,
+                            file_name="lecture_notes.docx",
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                         )
                 
             except Exception as e:

@@ -24,3 +24,5 @@ python-dotenv
 Pillow
 asyncio
 mdpdf
+python-docx
+markdown
