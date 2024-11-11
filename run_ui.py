@@ -9,7 +9,7 @@ import asyncio
 # Core functionality imports
 from VideoTranscriber import transcribe_video
 from VideoFrameExtractor import extract_frames
-from VideoLectureNotesCreatorAgent import LectureNotesCreator
+from LectureNotesCreator import LectureNotesCreator
 from Utils import (
     get_output_folder,
     extract_scene_number
