@@ -10,14 +10,8 @@ A Streamlit-based application that processes video lectures to automatically gen
   - Optional manual transcript upload
   - Intelligent frame extraction and analysis
 
-- 🤖 AI-Powered Analysis
-  - Removes unmeaningful and duplicate frames
-  - Generates smart summaries of transcripts
-  - Creates contextual descriptions for key frames
-  - Customizable AI prompts for different processing stages
-
 - 📄 Output Generation
-  - Creates a PDF report combining visual and text summaries
+  - Creates a Document report combining visual and text summaries
   - Includes both transcript and key frame analysis
   - Downloadable transcript and final report
 
@@ -57,10 +51,6 @@ streamlit run run_ui.py
    - **Cleanup**: Toggle temporary file removal
 
 3. Customize AI Prompts (Optional):
-   - Transcript Summary Prompt
-   - Image Summary Prompt
-   - Unmeaningful Frames Detection Prompt
-   - Duplicate Frames Detection Prompt
 
 4. Upload and Process:
    - Upload your video file
@@ -85,15 +75,9 @@ streamlit run run_ui.py
 
 4. **Output**
    - Downloadable transcript
-   - PDF report with annotated frames and summaries
+   - Doc report with annotated frames and summaries
 
 ## Output Structure
-
-The application creates an `output` folder containing:
-- Extracted frames
-- Video transcript
-- Final PDF report
-- Temporary processing files (if cleanup is disabled)
 
 ## Requirements
 
@@ -110,5 +94,59 @@ The application creates an `output` folder containing:
 - Ensure sufficient disk space for temporary files
 - API keys should be configured in environment variables
 
+
+Logic:
+
+#### Step-by-Step Process
+
+1. **Initial Notes Creation** 
+   - Process raw transcript
+   - Extract main topics and concepts
+   - Create structured outline
+   - Highlight key terminology
+
+2. **Missing Content Analysis**
+   - Review initial notes for gaps
+   - Identify unexplained concepts
+   - Check for logical flow issues
+   - Suggest additional examples/clarifications
+
+3. **Notes Combination**
+   - Merge initial notes with missing content
+   - Ensure coherent structure
+   - Add visual elements and formatting
+   - Create clear section breaks
+
+4. **Student Review**
+   - AI student role reviews notes
+   - Identifies unclear sections
+   - Generates clarifying questions
+   - Checks for completeness
+
+5. **Q&A Enhancement**
+   - Generate answers to student questions
+   - Add Q&A section to notes
+   - Summarize key points from Q&A
+   - Format for readability
+
+6. **Final Output**
+   - Combine notes with extracted frames
+   - Add visual annotations
+   - Create downloadable formats
+   - Generate metadata
+
+### AI Roles
+
+- **Teacher Assistant**
+  - Creates initial notes
+  - Identifies missing content
+  - Combines and enhances notes
+  - Answers student questions
+
+- **Student Assistant**
+  - Reviews notes for clarity
+  - Generates relevant questions
+  - Ensures comprehensibility
+  - Validates completeness
 
 Need to install brew install pandoc
