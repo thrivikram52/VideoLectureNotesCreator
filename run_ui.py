@@ -5,6 +5,10 @@ from tkinter import filedialog
 import zipfile
 from datetime import datetime
 import asyncio
+import nest_asyncio
+
+# Apply nest_asyncio to allow nested event loops
+nest_asyncio.apply()
 
 # Core functionality imports
 from VideoTranscriber import transcribe_video

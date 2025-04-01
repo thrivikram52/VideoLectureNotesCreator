@@ -17,40 +17,77 @@ A Streamlit-based application that processes video lectures to automatically gen
 
 ## Requirements
 
-- Python 3.6+
+- Python 3.7+
+- Homebrew (for macOS)
 
+## System Dependencies
+
+For macOS:
+```bash
+# Install Tesseract for OCR
 brew install tesseract
+
+# Install Tkinter for file dialogs
+brew install python-tk@3.13  # Use appropriate version matching your Python
+
+# Install Pandoc for document conversion
+brew install pandoc
+```
+
+For Windows:
+- Install Tesseract OCR from the official installer
+- Python's tkinter usually comes pre-installed
 
 ## Installation
 
 1. Clone the repository or download the source code.
-2. Create a virtual environment on Mac as follows
 
+2. Create a virtual environment:
+
+On macOS/Linux:
+```bash
 python -m venv VideoLectureNotesCreator
 source VideoLectureNotesCreator/bin/activate
+```
 
-On Windows
+On Windows:
+```bash
 python -m venv VideoLectureNotesCreator
 VideoLectureNotesCreator\Scripts\activate
-
+```
 
 3. Install the required dependencies:
+```bash
+# Upgrade pip and setuptools first
+pip install --upgrade pip setuptools wheel
+
+# Install the required packages
 pip install -r requirements.txt
 
+# Install additional required packages
+pip install tk nest_asyncio
+```
+
 ## Usage
-Export open AI API Key on terminal
-export OPENAI_API_KEY={KEY}
 
-Run the streamlit app
+1. Set up your OpenAI API Key:
+```bash
+# Option 1: Export as environment variable
+export OPENAI_API_KEY={YOUR_API_KEY}
+
+# Option 2: Create a .env file
+echo "OPENAI_API_KEY=your_api_key_here" > .env
+```
+
+2. Run the streamlit app:
+```bash
 streamlit run run_ui.py
+```
 
-
-2. Configure Processing Parameters:
+3. Configure Processing Parameters:
    - **SSIM Threshold** (0.0-1.0): Controls scene detection sensitivity
    - **Frame Skip**: Number of frames to skip during analysis
    - **Cleanup**: Toggle temporary file removal
-
-3. Customize AI Prompts (Optional):
 
 4. Upload and Process:
    - Upload your video file
@@ -77,16 +114,6 @@ streamlit run run_ui.py
    - Downloadable transcript
    - Doc report with annotated frames and summaries
 
-## Output Structure
-
-## Requirements
-
-- Python 3.7+
-- Streamlit
-- OpenAI API access
-- FFmpeg (for video processing)
-- Additional dependencies listed in requirements.txt
-
 ## Notes
 
 - Processing time varies based on video length and quality
@@ -94,6 +121,28 @@ streamlit run run_ui.py
 - Ensure sufficient disk space for temporary files
 - API keys should be configured in environment variables
 
+## Troubleshooting
+
+Common issues and solutions:
+
+1. **Tkinter Issues**:
+   - If you get tkinter-related errors, ensure python-tk is installed for your Python version
+   - On macOS M1/M2: `brew install python-tk@3.13` (adjust version as needed)
+
+2. **Event Loop Errors**:
+   - If you get asyncio event loop errors, the app uses nest_asyncio to handle them
+   - This is automatically installed with the requirements
+
+3. **OpenAI API Issues**:
+   - Ensure your API key is correctly set
+   - Check your API key has sufficient credits
+
+4. **Performance Issues**:
+   - Install watchdog for better performance:
+     ```bash
+     xcode-select --install  # macOS only
+     pip install watchdog
+     ```
 
 Logic:
 
